@@ -1,0 +1,89 @@
+@font-face {
+  font-family: 'Everyday Sans Web';
+  src: url('/fonts/Light-Web.woff2') format('woff2'),
+       url('/fonts/Light-Web.woff') format('woff');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Everyday Sans Web';
+  src: url('/fonts/LightItalic-Web.woff2') format('woff2'),
+       url('/fonts/LightItalic-Web.woff') format('woff');
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Everyday Sans Web';
+  src: url('/fonts/Regular-Web.woff2') format('woff2'),
+       url('/fonts/Regular-Web.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Everyday Sans Web';
+  src: url('/fonts/RegularItalic-Web.woff2') format('woff2'),
+       url('/fonts/RegularItalic-Web.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Everyday Sans Web';
+  src: url('/fonts/Medium-Web.woff2') format('woff2'),
+       url('/fonts/Medium-Web.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Everyday Sans Web';
+  src: url('/fonts/MediumItalic-Web.woff2') format('woff2'),
+       url('/fonts/MediumItalic-Web.woff') format('woff');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Everyday Sans Web';
+  src: url('/fonts/Bold-Web.woff2') format('woff2'),
+       url('/fonts/Bold-Web.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Everyday Sans Web';
+  src: url('/fonts/BoldItalic-Web.woff2') format('woff2'),
+       url('/fonts/BoldItalic-Web.woff') format('woff');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Everyday Sans Web';
+  src: url('/fonts/Black-Web.woff2') format('woff2'),
+       url('/fonts/Black-Web.woff') format('woff');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Everyday Sans Web';
+  src: url('/fonts/BlackItalic-Web.woff2') format('woff2'),
+       url('/fonts/BlackItalic-Web.woff') format('woff');
+  font-weight: 900;
+  font-style: italic;
+  font-display: swap;
+}
