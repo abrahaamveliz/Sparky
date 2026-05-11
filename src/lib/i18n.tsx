@@ -45,7 +45,8 @@ const es: Dict = {
     "Tu canasta se exportará a walmart.com.gt para completar la compra.",
   "delivery.popover.cta": "Abrir carrito",
 
-  // sub-navbar items
+  // sub-navbar
+  "subnav.aria_label": "Navegación de categorías",
   "subnav.departamentos": "Departamentos",
   "subnav.departamentos.prompt": "mostrame los departamentos disponibles",
   "subnav.categorias": "Categorías",
@@ -59,19 +60,19 @@ const es: Dict = {
   "subnav.farmacia.prompt": "productos de farmacia",
   "subnav.nuevos": "Nuevos",
   "subnav.nuevos.prompt": "productos recién llegados",
-  "subnav.negocios": "Negocios",
-  "subnav.negocios.prompt": "productos para negocios",
+  "subnav.limpieza": "Limpieza",
+  "subnav.limpieza.prompt": "muéstrame la sección de limpieza",
   "subnav.bebes": "Bebés",
   "subnav.bebes.prompt": "productos esenciales para bebés",
   "subnav.comidas": "Comidas fáciles",
   "subnav.comidas.prompt": "ideas de comidas rápidas y fáciles",
   "subnav.mis_items": "Mis ítems",
   "subnav.solo_gt": "Solo en GT",
-  "subnav.solo_gt.prompt": "productos exclusivos de Walmart Guatemala",
-  "subnav.tarjeta": "Tarjeta",
-  "subnav.tarjeta.prompt": "promociones con tarjeta de crédito",
-  "subnav.membresia": "Membresía",
-  "subnav.membresia.prompt": "información sobre membresía",
+  "subnav.solo_gt.prompt":
+    "mostrame productos de las marcas exclusivas de Walmart: Great Value, Parent's Choice, Equate, Mainstays y Athletic Works",
+  "subnav.tarjeta": "Pagos",
+  "subnav.tarjeta.prompt":
+    "¿cómo se hacen los pagos? ¿Sparky procesa la compra o me redirige a otro lado?",
 
   // mega-menu
   "mega.see_all": "Ver todo en",
@@ -96,6 +97,10 @@ const es: Dict = {
   // hero banner CTA
   "hero.banner.title": "Conocé a {name}, tu asistente con IA",
   "hero.banner.cta": "Solo para Walmart Guatemala · ¡empezá a chatear hoy!",
+
+  // hero video
+  "hero.video.title": "Video de demostración de {name}",
+  "hero.video.fallback": "Video no disponible",
 
   // hero FAQ
   "hero.faq.heading": "Preguntas frecuentes",
@@ -125,6 +130,7 @@ const es: Dict = {
   "result.results": "{n} resultados",
   "result.in_sections": "en {n} secciones",
   "result.for_query": "para \"{q}\"",
+  "result.omitted_no_price": "{n} sin precio omitidos",
   "result.tab.products": "Productos",
   "result.tab.compare": "Comparar",
   "result.tab.detail": "Detalle",
@@ -140,6 +146,14 @@ const es: Dict = {
     "Estos resultados no parecen coincidir con tu búsqueda",
   "result.low_confidence.body":
     "Walmart Guatemala puede no tener este producto en su catálogo en línea. Lo que ves abajo son los items más cercanos.",
+  "result.safe.mismatch_for_query":
+    "No encontramos productos que coincidan exactamente con \"{q}\" en el catálogo en línea de Walmart Guatemala. Lo que ves abajo son los ítems más cercanos que devolvió el catálogo — pueden no ser lo que buscas.",
+  "result.safe.mismatch_generic":
+    "No encontramos productos que coincidan exactamente con tu búsqueda en el catálogo en línea de Walmart Guatemala. Lo que ves abajo son los ítems más cercanos.",
+  "result.safe.empty_for_query":
+    "Walmart Guatemala no tiene resultados para \"{q}\" en su catálogo en línea. Probá ajustar la consulta o usar uno de los chips de abajo.",
+  "result.safe.empty_generic":
+    "Walmart Guatemala no tiene resultados para esta búsqueda en su catálogo en línea. Probá ajustar la consulta o usar uno de los chips de abajo.",
   "result.empty.title": "No encontramos productos",
   "result.empty.body":
     "Walmart Guatemala no tiene resultados para esta búsqueda. Probá ajustar la consulta o usar uno de los chips de abajo.",
@@ -204,11 +218,18 @@ const es: Dict = {
   "cart.subtitle_many": "{n} productos",
   "cart.empty.title": "Carrito vacío",
   "cart.empty.body": "Agrega productos desde las recomendaciones de {name}.",
+  "cart.empty.cta": "Cerrar y explorar",
   "cart.subtotal": "Subtotal",
   "cart.checkout": "Abrir en Walmart →",
   "cart.checkout.hint": "Te redirigimos a walmart.com.gt para finalizar.",
   "cart.clear": "Vaciar carrito",
   "cart.button.aria": "Abrir carrito",
+  "cart.button.aria_count_one": "Abrir carrito, {n} producto",
+  "cart.button.aria_count_many": "Abrir carrito, {n} productos",
+  "cart.close.aria": "Cerrar carrito",
+  "cart.popover.title": "¡Tu primer producto!",
+  "cart.popover.body": "Toca el carrito para ver lo que llevas.",
+  "cart.popover.close": "Cerrar aviso",
   "cart.line.remove": "Quitar",
 
   // footer
@@ -231,6 +252,7 @@ const es: Dict = {
   "prefs.title": "Preferencias",
   "prefs.subtitle": "{name} usará estas reglas para personalizar tu canasta",
   "prefs.gear.aria": "Abrir preferencias",
+  "prefs.close.aria": "Cerrar preferencias",
   "prefs.budget.label": "Presupuesto total",
   "prefs.budget.placeholder": "Sin límite",
   "prefs.budget.clear": "Quitar",
@@ -265,6 +287,24 @@ const es: Dict = {
   "error.unknown.body":
     "Ocurrió un error inesperado. Probá enviar el mensaje de nuevo.",
   "error.dismiss": "Cerrar",
+
+  // per-turn error tile (shown inline when an assistant turn fails)
+  "turn.error.title": "Esta respuesta falló",
+  "turn.error.body": "La conexión se interrumpió antes de terminar. Podés reintentarla.",
+  "turn.error.retry": "Reintentar",
+  "turn.render_error.title": "No pude mostrar este resultado",
+  "turn.render_error.body": "La respuesta del catálogo tenía un formato inesperado. Probá enviar de nuevo el mensaje.",
+
+  // skip link
+  "a11y.skip_to_content": "Saltar al contenido",
+  "a11y.app_title": "{name} · Asistente de compras Walmart Guatemala",
+  "a11y.lang_label": "Idioma",
+
+  // confirm dialog
+  "confirm.cancel": "Cancelar",
+  "confirm.delete_chat.title": "¿Eliminar esta conversación?",
+  "confirm.delete_chat.body": "Se borrará permanentemente. No se puede deshacer.",
+  "confirm.delete_chat.confirm": "Eliminar",
 };
 
 const en: Dict = {
@@ -294,7 +334,8 @@ const en: Dict = {
     "Your basket will export to walmart.com.gt to complete checkout.",
   "delivery.popover.cta": "Open cart",
 
-  // sub-navbar items
+  // sub-navbar
+  "subnav.aria_label": "Category navigation",
   "subnav.departamentos": "Departments",
   "subnav.departamentos.prompt": "show me the available departments",
   "subnav.categorias": "Categories",
@@ -308,19 +349,19 @@ const en: Dict = {
   "subnav.farmacia.prompt": "pharmacy products",
   "subnav.nuevos": "New",
   "subnav.nuevos.prompt": "newly arrived products",
-  "subnav.negocios": "Business",
-  "subnav.negocios.prompt": "products for business",
+  "subnav.limpieza": "Cleaning",
+  "subnav.limpieza.prompt": "show me the cleaning section",
   "subnav.bebes": "Baby",
   "subnav.bebes.prompt": "baby essentials",
   "subnav.comidas": "Easy meals",
   "subnav.comidas.prompt": "quick and easy meal ideas",
   "subnav.mis_items": "My items",
   "subnav.solo_gt": "Only in GT",
-  "subnav.solo_gt.prompt": "products exclusive to Walmart Guatemala",
-  "subnav.tarjeta": "Credit card",
-  "subnav.tarjeta.prompt": "credit card promotions",
-  "subnav.membresia": "Membership",
-  "subnav.membresia.prompt": "information about membership",
+  "subnav.solo_gt.prompt":
+    "show me products from Walmart's exclusive brands: Great Value, Parent's Choice, Equate, Mainstays and Athletic Works",
+  "subnav.tarjeta": "Payments",
+  "subnav.tarjeta.prompt":
+    "how do payments work? does Sparky charge me or redirect me somewhere else?",
 
   // mega-menu
   "mega.see_all": "See all in",
@@ -345,6 +386,10 @@ const en: Dict = {
   // hero banner CTA
   "hero.banner.title": "Meet {name}, your AI assistant",
   "hero.banner.cta": "Only for Walmart Guatemala — start chatting today!",
+
+  // hero video
+  "hero.video.title": "{name} demo video",
+  "hero.video.fallback": "Video unavailable",
 
   // hero FAQ
   "hero.faq.heading": "Frequently asked questions",
@@ -372,6 +417,7 @@ const en: Dict = {
   "result.results": "{n} results",
   "result.in_sections": "in {n} sections",
   "result.for_query": "for \"{q}\"",
+  "result.omitted_no_price": "{n} without price omitted",
   "result.tab.products": "Products",
   "result.tab.compare": "Compare",
   "result.tab.detail": "Detail",
@@ -387,6 +433,14 @@ const en: Dict = {
     "These results don't seem to match your search",
   "result.low_confidence.body":
     "Walmart Guatemala may not carry this product in their online catalog. What you see below are the closest items.",
+  "result.safe.mismatch_for_query":
+    "We couldn't find products that exactly match \"{q}\" in Walmart Guatemala's online catalog. What you see below are the closest items the catalog returned — they may not be what you're looking for.",
+  "result.safe.mismatch_generic":
+    "We couldn't find products that exactly match your search in Walmart Guatemala's online catalog. What you see below are the closest items.",
+  "result.safe.empty_for_query":
+    "Walmart Guatemala has no results for \"{q}\" in their online catalog. Try adjusting your query or use one of the chips below.",
+  "result.safe.empty_generic":
+    "Walmart Guatemala has no results for this search in their online catalog. Try adjusting your query or use one of the chips below.",
   "result.empty.title": "No products found",
   "result.empty.body":
     "Walmart Guatemala has no results for this search. Try adjusting your query or use one of the chips below.",
@@ -445,11 +499,18 @@ const en: Dict = {
   "cart.subtitle_many": "{n} items",
   "cart.empty.title": "Empty cart",
   "cart.empty.body": "Add products from {name}'s recommendations.",
+  "cart.empty.cta": "Close and browse",
   "cart.subtotal": "Subtotal",
   "cart.checkout": "Open in Walmart →",
   "cart.checkout.hint": "We'll redirect you to walmart.com.gt to finish.",
   "cart.clear": "Clear cart",
   "cart.button.aria": "Open cart",
+  "cart.button.aria_count_one": "Open cart, {n} item",
+  "cart.button.aria_count_many": "Open cart, {n} items",
+  "cart.close.aria": "Close cart",
+  "cart.popover.title": "Your first item!",
+  "cart.popover.body": "Tap the cart to see what's inside.",
+  "cart.popover.close": "Dismiss",
   "cart.line.remove": "Remove",
 
   "footer.disclaimer":
@@ -470,6 +531,7 @@ const en: Dict = {
   "prefs.title": "Preferences",
   "prefs.subtitle": "{name} will use these rules to personalize your basket",
   "prefs.gear.aria": "Open preferences",
+  "prefs.close.aria": "Close preferences",
   "prefs.budget.label": "Total budget",
   "prefs.budget.placeholder": "No limit",
   "prefs.budget.clear": "Clear",
@@ -503,6 +565,24 @@ const en: Dict = {
   "error.unknown.body":
     "An unexpected error occurred. Try sending the message again.",
   "error.dismiss": "Dismiss",
+
+  // per-turn error tile
+  "turn.error.title": "This response failed",
+  "turn.error.body": "The connection dropped before it finished. You can retry it.",
+  "turn.error.retry": "Retry",
+  "turn.render_error.title": "Couldn't show this result",
+  "turn.render_error.body": "The catalog response was in an unexpected shape. Try sending the message again.",
+
+  // skip link
+  "a11y.skip_to_content": "Skip to content",
+  "a11y.app_title": "{name} · Walmart Guatemala shopping assistant",
+  "a11y.lang_label": "Language",
+
+  // confirm dialog
+  "confirm.cancel": "Cancel",
+  "confirm.delete_chat.title": "Delete this conversation?",
+  "confirm.delete_chat.body": "This will be removed permanently and can't be undone.",
+  "confirm.delete_chat.confirm": "Delete",
 };
 
 const DICTS: Record<Locale, Dict> = { es, en };
@@ -534,8 +614,10 @@ function detectInitial(): Locale {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored === "es" || stored === "en") return stored;
   } catch {}
-  const nav = navigator.language || "es";
-  return nav.toLowerCase().startsWith("en") ? "en" : "es";
+  // Default to Spanish for first-time visitors — this is a Walmart
+  // Guatemala demo. English-speaking users flip via the locale switcher;
+  // the choice persists in localStorage.
+  return "es";
 }
 
 export function LocaleProvider({ children }: { children: ReactNode }) {

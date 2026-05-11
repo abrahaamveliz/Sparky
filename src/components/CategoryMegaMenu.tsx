@@ -84,6 +84,7 @@ export function CategoryMegaMenu({ open, onClose, anchorRef }: Props) {
     <div
       className="cat-mega"
       role="dialog"
+      aria-label={t("subnav.categorias")}
       ref={ref}
       style={{ position: "fixed", top: pos.top, left: pos.left }}
     >

@@ -1,10 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatGTQ } from "@/lib/format";
 import type { Product } from "@/lib/extract-products";
 import { gradientFor } from "./ProductCard";
 import { useCart } from "@/lib/cart-store";
 import { useLocale } from "@/lib/i18n";
 import { QtyStepper } from "./QtyStepper";
+
+// Catalog descriptions arrive as HTML fragments ("foo<br/>bar<br/>"). We
+// render plain text, so map line-break tags to newlines, strip every other
+// tag, decode the entities the catalog actually uses, and collapse runs.
+// Render result with `white-space: pre-line` so newlines become visual
+// breaks without enabling rich-text injection.
+function cleanDescription(raw: string): string {
+  return raw
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/(p|li|div|h[1-6])\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 export function DetailPane({
   product,
@@ -23,6 +44,10 @@ export function DetailPane({
   const hasImages = images.length > 0;
   const hasDiscount =
     product.listPrice > 0 && product.listPrice > product.sellingPrice;
+  const description = useMemo(
+    () => (product.description ? cleanDescription(product.description) : ""),
+    [product.description],
+  );
 
   useEffect(() => {
     setImgIdx(0);
@@ -106,8 +131,8 @@ export function DetailPane({
               <span className="stock-dot" /> {t("detail.in_stock")}
             </span>
           </div>
-          {product.description && (
-            <p className="detail-desc">{product.description}</p>
+          {description && (
+            <p className="detail-desc">{description}</p>
           )}
           {visibleSpecs.length > 0 && (
             <div className="detail-specs">
@@ -128,15 +153,16 @@ export function DetailPane({
             compared={compared}
             onCompare={onCompare}
           />
-          <a
-            className="detail-walmart-link"
-            href={product.link}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("detail.view_walmart")}
-          </a>
-          <div className="detail-disclaimer">{t("detail.live_disclaimer")}</div>
+          {product.link && product.link !== "#" && (
+            <a
+              className="detail-walmart-link"
+              href={product.link}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("detail.view_walmart")}
+            </a>
+          )}
         </div>
       </div>
     </div>

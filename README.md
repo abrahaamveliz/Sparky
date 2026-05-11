@@ -1,73 +1,37 @@
-# React + TypeScript + Vite
+---
+title: Sparky
+emoji: 🛒
+colorFrom: blue
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+short_description: Walmart Guatemala shopping assistant
+---
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# Sparky
 
-Currently, two official plugins are available:
+Walmart Guatemala shopping assistant. Vite/React front-end + a Node API route
+(`/api/chat`) that talks to an LLM proxy and the Walmart-GT MCP server.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Local development
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+cp .env.example .env.local   # fill in the secret values
+npm run dev                  # boots web (5173) + api (8787) concurrently
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Deployment
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+This repo ships with a `Dockerfile` so it can be deployed to any container
+host. On Hugging Face Spaces, set the Space SDK to **Docker** and configure
+these secrets in **Settings → Variables and secrets**:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- `LLM_PROXY_URL`, `LLM_PROXY_API_KEY` — the OpenAI-compatible proxy
+- `WALMART_MCP_URL`, `WALMART_MCP_API_KEY` — the Walmart-GT MCP server
+- `VITE_PRODUCT_NAME`, `PRODUCT_NAME` — branding
+- `VITE_LOGO_URL`, `VITE_NAV_BAR_ASSET_1..3`, `VITE_AGENT_AVATAR_URL`,
+  `VITE_BANNER_1` — optional brand assets
+
+`VITE_*` values are read at build time; the others are read at runtime.

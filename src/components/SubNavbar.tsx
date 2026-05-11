@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { ThreadPrimitive } from "@assistant-ui/react";
+import { useThreadIsRunning } from "@assistant-ui/core/react";
 import { useLocale } from "@/lib/i18n";
 import { CategoryMegaMenu } from "./CategoryMegaMenu";
 
@@ -16,24 +17,25 @@ const ITEMS: Item[] = [
   { kind: "chat", labelKey: "subnav.entrega", promptKey: "subnav.entrega.prompt" },
   { kind: "chat", labelKey: "subnav.farmacia", promptKey: "subnav.farmacia.prompt" },
   { kind: "chat", labelKey: "subnav.nuevos", promptKey: "subnav.nuevos.prompt" },
-  { kind: "chat", labelKey: "subnav.negocios", promptKey: "subnav.negocios.prompt" },
+  { kind: "chat", labelKey: "subnav.limpieza", promptKey: "subnav.limpieza.prompt" },
   { kind: "chat", labelKey: "subnav.bebes", promptKey: "subnav.bebes.prompt" },
   { kind: "chat", labelKey: "subnav.comidas", promptKey: "subnav.comidas.prompt" },
   { kind: "cart", labelKey: "subnav.mis_items" },
   { kind: "chat", labelKey: "subnav.solo_gt", promptKey: "subnav.solo_gt.prompt" },
   { kind: "chat", labelKey: "subnav.tarjeta", promptKey: "subnav.tarjeta.prompt" },
-  { kind: "chat", labelKey: "subnav.membresia", promptKey: "subnav.membresia.prompt" },
 ];
 
 export function SubNavbar({ onOpenCart }: { onOpenCart: () => void }) {
   const { t } = useLocale();
   const [megaOpen, setMegaOpen] = useState(false);
   const megaTriggerRef = useRef<HTMLButtonElement>(null);
+  const isRunning = useThreadIsRunning();
 
   return (
-    <nav className="subnav">
-      <div className="subnav-row">
-        {ITEMS.map((item, i) => {
+    <nav className="subnav" aria-label={t("subnav.aria_label")}>
+      <div className="subnav-wrap">
+        <div className="subnav-row">
+          {ITEMS.map((item, i) => {
           if (item.kind === "mega") {
             return (
               <div key={i} className="subnav-mega-wrap">
@@ -78,12 +80,18 @@ export function SubNavbar({ onOpenCart }: { onOpenCart: () => void }) {
               autoSend
               asChild
             >
-              <button type="button" className="subnav-pill">
+              <button
+                type="button"
+                className="subnav-pill"
+                disabled={isRunning}
+                aria-disabled={isRunning}
+              >
                 {t(item.labelKey)}
               </button>
             </ThreadPrimitive.Suggestion>
           );
         })}
+        </div>
       </div>
     </nav>
   );

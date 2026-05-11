@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   usePreferences,
   type Diet,
 } from "@/lib/preferences-store";
 import { useLocale } from "@/lib/i18n";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 import { formatGTQ } from "@/lib/format";
 
 const DIET_KEYS: Diet[] = [
@@ -52,6 +53,8 @@ export function PreferencesDrawer({
   const [budgetInput, setBudgetInput] = useState(
     preferences.budgetCap?.toString() ?? "",
   );
+  const drawerRef = useRef<HTMLElement>(null);
+  useFocusTrap(drawerRef, open);
 
   useEffect(() => {
     setBudgetInput(preferences.budgetCap?.toString() ?? "");
@@ -84,26 +87,31 @@ export function PreferencesDrawer({
     <div
       className="prefs-overlay"
       onClick={onClose}
-      role="dialog"
-      aria-modal="true"
+      role="presentation"
     >
       <aside
+        ref={drawerRef}
         className="prefs-drawer"
         onClick={(e) => e.stopPropagation()}
-        aria-label={t("prefs.title")}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="prefs-drawer-title"
       >
         <header className="prefs-head">
           <div>
-            <h2 className="prefs-title">{t("prefs.title")}</h2>
+            <h2 id="prefs-drawer-title" className="prefs-title">{t("prefs.title")}</h2>
             <span className="prefs-sub">{t("prefs.subtitle")}</span>
           </div>
           <button
             type="button"
             className="prefs-close"
             onClick={onClose}
-            aria-label={t("error.dismiss")}
+            aria-label={t("prefs.close.aria")}
           >
-            ✕
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
           </button>
         </header>
 

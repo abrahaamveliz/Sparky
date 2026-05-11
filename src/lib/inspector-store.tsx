@@ -33,6 +33,12 @@ type InspectorContextValue = {
 
 const InspectorContext = createContext<InspectorContextValue | null>(null);
 
+// Cap on retained inspector entries. Keeps long demo sessions from growing
+// the trace panel unbounded — anything past this is evicted oldest-first.
+// Existing entries are still updated by id (no eviction on update), so an
+// in-flight call can complete even after it scrolls out of the cap window.
+const MAX_INSPECTOR_ENTRIES = 50;
+
 export function InspectorProvider({ children }: { children: ReactNode }) {
   const [entries, setEntries] = useState<InspectorEntry[]>([]);
 
@@ -44,16 +50,19 @@ export function InspectorProvider({ children }: { children: ReactNode }) {
         next[idx] = { ...next[idx], ...patch } as InspectorEntry;
         return next;
       }
-      const fresh: InspectorEntry = {
+      const defaults = {
         time: new Date().toLocaleTimeString("en-GB", { hour12: false }),
-        status: "running",
+        status: "running" as const,
         latency: null,
         startedAt: performance.now(),
         sizeIn: 0,
         sizeOut: 0,
-        ...(patch as InspectorEntry),
       };
-      return [fresh, ...prev];
+      const fresh: InspectorEntry = { ...defaults, ...patch };
+      const next = [fresh, ...prev];
+      return next.length > MAX_INSPECTOR_ENTRIES
+        ? next.slice(0, MAX_INSPECTOR_ENTRIES)
+        : next;
     });
   }, []);
 

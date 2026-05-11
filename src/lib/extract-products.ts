@@ -123,3 +123,25 @@ export function extractProducts(
 
   return [];
 }
+
+/** Count of items in a tool result that parsed but were dropped because
+ *  they had no usable price (sellingPrice <= 0). Used to surface a small
+ *  caveat when search returned more rows than the UI shows. */
+export function countOmittedNoPrice(
+  toolName: string,
+  result: unknown,
+): number {
+  if (!PRODUCT_TOOLS.has(toolName)) return 0;
+  const data = unwrap(result);
+  if (!data || typeof data !== "object") return 0;
+  if ("products" in data) {
+    const list = (data as { products?: unknown[] }).products ?? [];
+    let omitted = 0;
+    for (const raw of list) {
+      const p = toProduct(raw);
+      if (p && p.sellingPrice <= 0) omitted++;
+    }
+    return omitted;
+  }
+  return 0;
+}

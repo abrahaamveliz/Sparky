@@ -2,12 +2,12 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import type { UIMessage } from "ai";
+import { useDebouncedStorage } from "./use-debounced-storage";
 
 const STORAGE_KEY = "walmart-mcp:chat";
 
@@ -45,12 +45,6 @@ function load(): Stored {
   return makeFresh();
 }
 
-function persist(s: Stored) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-  } catch {}
-}
-
 type ChatHistoryValue = {
   /** Stable per-conversation id; flips when newConversation/deleteChat is
    *  called. Used as a `key` on the runtime shell to force a clean remount. */
@@ -72,9 +66,7 @@ const Ctx = createContext<ChatHistoryValue | null>(null);
 export function ChatHistoryProvider({ children }: { children: ReactNode }) {
   const [stored, setStored] = useState<Stored>(load);
 
-  useEffect(() => {
-    persist(stored);
-  }, [stored]);
+  useDebouncedStorage(STORAGE_KEY, stored);
 
   const saveMessages = useCallback((messages: UIMessage[]) => {
     setStored((prev) => {

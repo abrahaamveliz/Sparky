@@ -235,16 +235,18 @@ export function CompareTable({
             {cheapest.name.split(" ").slice(0, 5).join(" ")}{" "}
             {t("compare.recommend_tail")}
           </span>
-          <a
-            className="btn btn-primary btn-sm"
-            href={cheapest.link}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("compare.see_walmart", {
-              price: formatGTQ(cheapest.sellingPrice),
-            })}
-          </a>
+          {cheapest.link && cheapest.link !== "#" && (
+            <a
+              className="btn btn-primary btn-sm"
+              href={cheapest.link}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("compare.see_walmart", {
+                price: formatGTQ(cheapest.sellingPrice),
+              })}
+            </a>
+          )}
         </div>
       )}
     </div>

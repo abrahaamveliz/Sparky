@@ -1,11 +1,11 @@
 import {
   ThreadPrimitive,
   MessagePrimitive,
+  ActionBarPrimitive,
   useAuiState,
   type ThreadAssistantMessagePart,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
-import { useThreadIsRunning } from "@assistant-ui/core/react";
 import { Spark } from "./Spark";
 import { Composer } from "./Composer";
 import { Hero } from "./Hero";
@@ -13,6 +13,7 @@ import { ResultBlock } from "./ResultBlock";
 import { ResultLoading } from "./ResultLoading";
 import { Prose } from "./Prose";
 import { ToolPartTracker } from "./ToolPartTracker";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { useInspector } from "@/lib/inspector-store";
 import { useLocale } from "@/lib/i18n";
 import { AGENT_AVATAR_URL } from "@/lib/product-name";
@@ -51,7 +52,21 @@ function UserMessage() {
       <div className="bubble bubble-user">
         <MessagePrimitive.Parts />
       </div>
-      <div className="msg-avatar msg-avatar-user">U</div>
+      <div className="msg-avatar msg-avatar-user" aria-hidden="true">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      </div>
     </MessagePrimitive.Root>
   );
 }
@@ -72,7 +87,13 @@ function AssistantMessage() {
   const wasRunningOnMount = useRef(isRunning);
   useEffect(() => {
     if (wasRunningOnMount.current) {
-      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const reduce =
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      rootRef.current?.scrollIntoView({
+        behavior: reduce ? "auto" : "smooth",
+        block: "start",
+      });
     }
   }, []);
 
@@ -118,20 +139,29 @@ function AssistantMessage() {
   // A product-yielding tool whose result hasn't arrived yet. We can't drop
   // the loading state on `!text` alone — prose sometimes streams in before
   // the tool result lands, which would otherwise flash a "0 resultados"
-  // ResultBlock until the products arrived.
-  const hasUnresolvedProductCall = toolParts.some(
-    (t) =>
-      [
-        "search_products",
-        "browse_category",
-        "get_product_by_slug",
-        "get_product_by_id",
-      ].includes(t.toolName) && (t as { result?: unknown }).result === undefined,
-  );
+  // ResultBlock until the products arrived. An errored tool is treated as
+  // resolved so we don't sit on a permanent skeleton.
+  const hasUnresolvedProductCall = toolParts.some((t) => {
+    const part = t as { result?: unknown; isError?: boolean };
+    if (part.isError) return false;
+    if (part.result !== undefined) return false;
+    return [
+      "search_products",
+      "browse_category",
+      "get_product_by_slug",
+      "get_product_by_id",
+    ].includes(t.toolName);
+  });
+
+  // The whole turn errored (network failure, stall, model exception). User
+  // cancellation is intentional and should NOT show the retry tile.
+  const isErrored =
+    status?.type === "incomplete" &&
+    (status.reason === "error" || status.reason === "other");
 
   // Decide what to render in the body
   const showLoading = isRunning && hasUnresolvedProductCall;
-  const showResultBlock = toolParts.length > 0 && !showLoading;
+  const showResultBlock = toolParts.length > 0 && !showLoading && !isErrored;
 
   return (
     <MessagePrimitive.Root ref={rootRef} className="msg msg-assistant">
@@ -161,11 +191,16 @@ function AssistantMessage() {
         )}
 
         {showResultBlock && (
-          <ResultBlock toolParts={toolParts as never} text={text} />
+          <ErrorBoundary
+            label="result-block"
+            fallback={<TurnRenderError />}
+          >
+            <ResultBlock toolParts={toolParts as never} text={text} />
+          </ErrorBoundary>
         )}
 
-        {!showLoading && !showResultBlock && text && (
-          <div className="msg-text">
+        {!showLoading && !showResultBlock && !isErrored && text && (
+          <div className={`msg-text${isRunning ? " is-streaming" : ""}`}>
             <Prose>{text}</Prose>
           </div>
         )}
@@ -173,18 +208,67 @@ function AssistantMessage() {
         {isRunning && !showLoading && !text && toolParts.length === 0 && (
           <ThinkingDots />
         )}
+
+        {isErrored && <TurnErrorTile />}
       </div>
     </MessagePrimitive.Root>
+  );
+}
+
+function TurnRenderError() {
+  const { t } = useLocale();
+  return (
+    <div className="turn-error" role="alert">
+      <div className="turn-error-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4" />
+          <path d="M12 16h.01" />
+        </svg>
+      </div>
+      <div className="turn-error-text">
+        <strong>{t("turn.render_error.title")}</strong>
+        <span>{t("turn.render_error.body")}</span>
+      </div>
+    </div>
+  );
+}
+
+function TurnErrorTile() {
+  const { t } = useLocale();
+  return (
+    <div className="turn-error" role="alert">
+      <div className="turn-error-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4" />
+          <path d="M12 16h.01" />
+        </svg>
+      </div>
+      <div className="turn-error-text">
+        <strong>{t("turn.error.title")}</strong>
+        <span>{t("turn.error.body")}</span>
+      </div>
+      <ActionBarPrimitive.Reload className="turn-error-retry">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 12a9 9 0 0 1 15.5-6.3L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-15.5 6.3L3 16" />
+          <path d="M3 21v-5h5" />
+        </svg>
+        {t("turn.error.retry")}
+      </ActionBarPrimitive.Reload>
+    </div>
   );
 }
 
 function ThinkingDots() {
   const { t } = useLocale();
   return (
-    <div className="thinking">
-      <span className="dot-anim" />
-      <span className="dot-anim" />
-      <span className="dot-anim" />
+    <div className="thinking" role="status" aria-live="polite" aria-busy="true">
+      <span className="dot-anim" aria-hidden="true" />
+      <span className="dot-anim" aria-hidden="true" />
+      <span className="dot-anim" aria-hidden="true" />
       <span style={{ marginLeft: 4 }}>{t("loading.thinking")}</span>
     </div>
   );

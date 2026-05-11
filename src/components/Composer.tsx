@@ -1,10 +1,17 @@
-import { ComposerPrimitive } from "@assistant-ui/react";
+import { ComposerPrimitive, useAuiState } from "@assistant-ui/react";
 import { useThreadIsRunning } from "@assistant-ui/core/react";
 import { useLocale } from "@/lib/i18n";
+
+const COMPOSER_MAX_CHARS = 4000;
+const COMPOSER_COUNTER_AT = 3500;
 
 export function Composer() {
   const running = useThreadIsRunning();
   const { t } = useLocale();
+  const text = useAuiState((s: { composer: { text: string } }) => s.composer.text) ?? "";
+  const remaining = COMPOSER_MAX_CHARS - text.length;
+  const showCounter = text.length >= COMPOSER_COUNTER_AT;
+  const overLimit = remaining < 0;
 
   return (
     <div className="composer-wrap">
@@ -16,6 +23,8 @@ export function Composer() {
           }
           rows={1}
           autoFocus
+          maxLength={COMPOSER_MAX_CHARS}
+          aria-label={t("composer.placeholder")}
         />
         <div className="composer-actions">
           {running ? (
@@ -55,7 +64,17 @@ export function Composer() {
           )}
         </div>
       </ComposerPrimitive.Root>
-      <div className="composer-disclaimer">{t("footer.disclaimer")}</div>
+      <div className="composer-foot">
+        <span className="composer-disclaimer">{t("footer.disclaimer")}</span>
+        {showCounter && (
+          <span
+            className={`composer-counter${overLimit ? " is-over" : ""}`}
+            aria-live="polite"
+          >
+            {remaining}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -100,14 +100,14 @@ export function ProductCard({
             <img
               className={`pcard-img-real${imgLoaded ? "" : " pcard-img-real-loading"}`}
               src={firstImage}
-              alt={product.name}
+              alt=""
               loading="lazy"
               decoding="async"
               onLoad={() => setImgLoaded(true)}
               onError={() => setImgFailed(true)}
             />
           ) : (
-            <span className="pcard-brand-glyph">{brandLetter}</span>
+            <span className="pcard-brand-glyph" aria-hidden="true">{brandLetter}</span>
           )}
         </button>
       </div>

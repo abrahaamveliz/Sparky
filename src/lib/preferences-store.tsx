@@ -2,11 +2,11 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { useDebouncedStorage } from "./use-debounced-storage";
 
 const STORAGE_KEY = "walmart-mcp:preferences";
 
@@ -73,13 +73,7 @@ function readStorage(): Preferences {
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState<Preferences>(() => readStorage());
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-    } catch {
-      // ignore quota / private mode
-    }
-  }, [preferences]);
+  useDebouncedStorage(STORAGE_KEY, preferences);
 
   const setBudget = useCallback(
     (q: number | null) =>

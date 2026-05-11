@@ -214,8 +214,11 @@ function matchesSpecs(productName: string, specs: Spec[]): boolean {
 }
 
 /** Reward when the query content word appears anywhere in the product's
- *  category leaves. E.g. query "pollo" matches a product with category
- *  "/Carnes y Pescados/Pollo/". */
+ *  category leaves AS A WHOLE WORD (with plural tolerance via wordsMatch).
+ *  Reason: the previous looser test allowed `cw.includes(qw.slice(0, 5))`,
+ *  so query "crema" matched "descremada" via substring and produced
+ *  embarrassing "Recomendado" picks (see pickFromSection bug fix below).
+ *  Whole-word + plural is the correct strictness for this path. */
 function categoryWordMatch(product: Product, query: string): boolean {
   const qWords = contentWords(query);
   if (qWords.length === 0) return false;
@@ -223,9 +226,7 @@ function categoryWordMatch(product: Product, query: string): boolean {
     const cwords = contentWords(c);
     for (const qw of qWords) {
       for (const cw of cwords) {
-        if (cw === qw || cw.startsWith(qw) || (qw.length >= 5 && cw.includes(qw.slice(0, 5)))) {
-          return true;
-        }
+        if (wordsMatch(cw, qw)) return true;
       }
     }
   }
@@ -308,6 +309,16 @@ export function pickFromSection(
     descriptorMatched.length === 0 && descriptors.length > 0
       ? afterSpec.filter((p) => nameContainsAll(p.name, descriptors))
       : descriptorMatched;
+
+  // RELEVANCE GATE: if the user typed real descriptor nouns AND not a single
+  // returned product's name contains them (even after the relaxed pass),
+  // refuse to nominate a "Recomendado". The catalog's full-text index can
+  // match substrings (e.g. "crema" inside "desCREMAda"), which previously
+  // surfaced an embarrassing confident pick. Returning null here lets the
+  // section render the cards without a recommendation chip; ResultBlock
+  // shows a low-confidence caveat in that case.
+  if (descriptors.length > 0 && relaxed.length === 0) return null;
+
   const eligible = relaxed.length > 0 ? relaxed : afterSpec;
 
   const shelf = dominantShelf(eligible);

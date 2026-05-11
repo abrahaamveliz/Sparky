@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCart } from "@/lib/cart-store";
 import { formatGTQ } from "@/lib/format";
 import { buildWalmartCartUrl } from "@/lib/walmart-cart";
 import { useLocale } from "@/lib/i18n";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 import { QtyStepper } from "./QtyStepper";
 
 export function CartDrawer({
@@ -14,6 +15,8 @@ export function CartDrawer({
 }) {
   const { items, count, total, inc, dec, remove, clear } = useCart();
   const { t } = useLocale();
+  const drawerRef = useRef<HTMLElement>(null);
+  useFocusTrap(drawerRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -31,15 +34,18 @@ export function CartDrawer({
   );
 
   return (
-    <div className="cart-overlay" onClick={onClose} role="dialog" aria-modal="true">
+    <div className="cart-overlay" onClick={onClose} role="presentation">
       <aside
+        ref={drawerRef}
         className="cart-drawer"
         onClick={(e) => e.stopPropagation()}
-        aria-label={t("cart.title")}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cart-drawer-title"
       >
         <header className="cart-drawer-head">
           <div>
-            <h2 className="cart-drawer-title">{t("cart.title")}</h2>
+            <h2 id="cart-drawer-title" className="cart-drawer-title">{t("cart.title")}</h2>
             <span className="cart-drawer-sub">
               {t(count === 1 ? "cart.subtitle_one" : "cart.subtitle_many", {
                 n: count,
@@ -51,9 +57,12 @@ export function CartDrawer({
             type="button"
             className="cart-drawer-close"
             onClick={onClose}
-            aria-label={t("detail.back")}
+            aria-label={t("cart.close.aria")}
           >
-            ✕
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
           </button>
         </header>
 
@@ -67,28 +76,39 @@ export function CartDrawer({
               </svg>
               <h3>{t("cart.empty.title")}</h3>
               <p>{t("cart.empty.body")}</p>
+              <button
+                type="button"
+                className="confirm-ok confirm-ok--default cart-empty-cta"
+                onClick={onClose}
+              >
+                {t("cart.empty.cta")}
+              </button>
             </div>
           ) : (
             <ul className="cart-list">
               {items.map((it) => (
                 <li className="cart-line" key={it.productId}>
-                  <div className="cart-line-img">
-                    {it.imageUrl ? (
-                      <img src={it.imageUrl} alt={it.name} loading="lazy" />
-                    ) : (
-                      <div className="cart-line-img-fallback">—</div>
-                    )}
-                  </div>
+                  <CartLineImage
+                    src={it.imageUrl}
+                    alt=""
+                    fallback={(it.brand || it.name || "?").charAt(0).toUpperCase()}
+                  />
                   <div className="cart-line-info">
                     <div className="cart-line-brand">{it.brand || "—"}</div>
-                    <a
-                      className="cart-line-name"
-                      href={it.link}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {it.name}
-                    </a>
+                    {it.link && it.link !== "#" ? (
+                      <a
+                        className="cart-line-name"
+                        href={it.link}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {it.name}
+                      </a>
+                    ) : (
+                      <span className="cart-line-name cart-line-name--plain">
+                        {it.name}
+                      </span>
+                    )}
                     <div className="cart-line-row">
                       <QtyStepper
                         qty={it.qty}
@@ -139,6 +159,35 @@ export function CartDrawer({
           </footer>
         )}
       </aside>
+    </div>
+  );
+}
+
+function CartLineImage({
+  src,
+  alt,
+  fallback,
+}: {
+  src?: string;
+  alt: string;
+  fallback: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <div className="cart-line-img cart-line-img--fallback">
+        <span aria-hidden="true">{fallback}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="cart-line-img">
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
     </div>
   );
 }

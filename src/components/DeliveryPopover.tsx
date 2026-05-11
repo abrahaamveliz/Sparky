@@ -45,7 +45,12 @@ export function DeliveryPopover({ open, onClose, onOpenCart }: Props) {
   const visibleAssets = ASSET_KEYS.filter((a) => a.url);
 
   return (
-    <div className="delivery-popover" role="dialog" ref={ref}>
+    <div
+      className="delivery-popover"
+      role="dialog"
+      aria-label={t("delivery.popover.title")}
+      ref={ref}
+    >
       <div className="delivery-popover-title">{t("delivery.popover.title")}</div>
 
       {visibleAssets.length > 0 && (

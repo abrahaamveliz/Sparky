@@ -4,6 +4,7 @@ import { Spark } from "./Spark";
 import { CartButton } from "./CartButton";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { DeliveryPopover } from "./DeliveryPopover";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { useLocale } from "@/lib/i18n";
 import { LOGO_URL, PRODUCT_NAME } from "@/lib/product-name";
 import { useChatHistory } from "@/lib/chat-history-store";
@@ -17,13 +18,8 @@ export function Topbar({
 }) {
   const { t } = useLocale();
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const { hasMessages, newConversation, deleteChat } = useChatHistory();
-
-  const onDeleteChat = () => {
-    if (window.confirm(t("chat.delete_confirm"))) {
-      deleteChat();
-    }
-  };
 
   return (
     <header className="topbar">
@@ -101,9 +97,10 @@ export function Topbar({
         <button
           type="button"
           className="topbar-icon-btn topbar-icon-btn--danger"
-          onClick={onDeleteChat}
+          onClick={() => setConfirmDeleteOpen(true)}
           title={t("chat.delete")}
           aria-label={t("chat.delete")}
+          aria-haspopup="dialog"
           disabled={!hasMessages}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -147,6 +144,19 @@ export function Topbar({
         <LocaleSwitcher />
         <CartButton onClick={onOpenCart} />
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title={t("confirm.delete_chat.title")}
+        body={t("confirm.delete_chat.body")}
+        confirmLabel={t("confirm.delete_chat.confirm")}
+        variant="danger"
+        onConfirm={() => {
+          setConfirmDeleteOpen(false);
+          deleteChat();
+        }}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
     </header>
   );
 }

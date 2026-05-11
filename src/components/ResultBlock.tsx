@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThreadPrimitive } from "@assistant-ui/react";
-import { extractProducts, type Product } from "@/lib/extract-products";
+import {
+  extractProducts,
+  countOmittedNoPrice,
+  type Product,
+} from "@/lib/extract-products";
 import { formatGTQ } from "@/lib/format";
-import { useInspector } from "@/lib/inspector-store";
 import { pickFromSection, type Pick } from "@/lib/decision-engine";
 import { useLocale } from "@/lib/i18n";
 import { usePreferences, type Diet } from "@/lib/preferences-store";
@@ -133,16 +136,34 @@ type Section = {
 
 const SECTIONABLE_TOOLS = new Set(["search_products", "browse_category"]);
 
-function sectionQuery(part: ToolPart): string {
+/** Human-readable section title. For search_products this is the typed
+ *  query; for browse_category the slug, prettified ("alimentos-congelados"
+ *  → "Alimentos congelados"). */
+function sectionTitle(part: ToolPart): string {
   if (typeof part.args.query === "string" && part.args.query.trim()) {
     return part.args.query.trim();
   }
   if (typeof part.args.category_path === "string" && part.args.category_path) {
     const segs = part.args.category_path.split("/").filter(Boolean);
-    return segs[segs.length - 1] ?? "Resultados";
+    const last = segs[segs.length - 1] ?? "Resultados";
+    // "alimentos-congelados" / "frutas-y-verduras" → "Alimentos congelados"
+    const pretty = last.replace(/-/g, " ").trim();
+    return pretty.charAt(0).toUpperCase() + pretty.slice(1);
   }
   if (typeof part.args.categoryId === "string") return part.args.categoryId;
   return "Resultados";
+}
+
+/** Query string passed to pickFromSection. Only meaningful when the user
+ *  actually typed a product noun via search_products. For browse_category
+ *  there's no descriptor to match against — return empty so the
+ *  decision-engine's relevance gate is bypassed and the picker just picks
+ *  the cheapest valid product on the dominant shelf. */
+function sectionMatchQuery(part: ToolPart): string {
+  if (typeof part.args.query === "string" && part.args.query.trim()) {
+    return part.args.query.trim();
+  }
+  return "";
 }
 
 export function ResultBlock({
@@ -172,6 +193,17 @@ export function ResultBlock({
     return Array.from(map.values());
   }, [toolParts]);
 
+  // Count of products dropped because the catalog returned them without a
+  // price. Surface as a caveat under the result head so the discrepancy
+  // between "20 found" and "12 shown" is explained instead of mysterious.
+  const omittedNoPrice = useMemo(() => {
+    let total = 0;
+    for (const part of toolParts) {
+      total += countOmittedNoPrice(part.toolName, part.result);
+    }
+    return total;
+  }, [toolParts]);
+
   // Build per-tool-call sections when 2+ product-yielding searches landed.
   // Single-call turns keep the existing flat-grid path.
   const sections = useMemo<Section[] | null>(() => {
@@ -183,13 +215,18 @@ export function ResultBlock({
     for (const part of productCalls) {
       const list = extractProducts(part.toolName, part.result);
       if (!list || list.length === 0) continue;
-      const query = sectionQuery(part);
+      // Section header: human-readable label.
+      // Match query: only the actually-typed product noun. Empty for
+      // browse_category so the picker doesn't try to match the slug name
+      // ("abarrotes") against product names and clamp every pick to null.
+      const headerQuery = sectionTitle(part);
+      const matchQuery = sectionMatchQuery(part);
       out.push({
         callId: part.toolCallId,
-        query,
+        query: headerQuery,
         products: list,
         pick: pickFromSection(list, {
-          query,
+          query: matchQuery,
           preferredBrands: preferences.preferredBrands,
           dietBlocklist,
         }),
@@ -208,10 +245,15 @@ export function ResultBlock({
       .productId;
   }, [products, sections]);
 
-  // Low-confidence detection — single-search mode only. The decision
-  // engine returns whyKey="fallback" when nothing matched shelf, category,
-  // or primary noun. That signals: "we returned products, but they don't
-  // really match the user's intent" (e.g. "I want a phone" → armband).
+  // Low-confidence detection — single-search mode only. Two trigger
+  // conditions:
+  //   (a) the decision engine ran and ended up at whyKey="fallback"
+  //       (returned products, but nothing matched shelf/category/noun);
+  //   (b) the relevance gate clamped pick to null (returned products,
+  //       but NONE of their names contain the user's primary noun as a
+  //       whole word — e.g. "pañales 8 meses" landing only a biberón).
+  // Both shapes mean "results don't match user intent" and the banner
+  // tells the user honestly so the UI doesn't look confidently wrong.
   const lowConfidence = useMemo(() => {
     if (sections) return false;
     if (products.length === 0) return false;
@@ -227,8 +269,47 @@ export function ResultBlock({
       preferredBrands: preferences.preferredBrands,
       dietBlocklist,
     });
-    return pick?.whyKey === "fallback";
+    return pick === null || pick.whyKey === "fallback";
   }, [products, toolParts, sections, preferences.preferredBrands, dietBlocklist]);
+
+  // Original query string the user (effectively) searched, for
+  // deterministic banner copy when the agent's prose is suppressed.
+  const userQuery = useMemo(() => {
+    const part = toolParts.find(
+      (p) =>
+        SECTIONABLE_TOOLS.has(p.toolName) &&
+        typeof p.args.query === "string" &&
+        (p.args.query as string).trim(),
+    );
+    return part ? (part.args.query as string).trim() : "";
+  }, [toolParts]);
+
+  // Deterministic prose-suppression. The agent's prose CANNOT be trusted
+  // when (a) the relevance gate said "no match" but products exist, or
+  // (b) products are empty but the prose claims products exist (forbidden
+  // phrases like "Aquí están…" / "Here are…"). In either case we swap
+  // the agent's prose for safe copy the user sees no matter what the
+  // model emits. This is the production-grade invariant: the UI is the
+  // source of truth, not the LLM.
+  const proseClaimsProducts = useMemo(() => {
+    if (!text) return false;
+    const t = text.toLowerCase();
+    return (
+      /\baquí\s+(est[áa]n|tienes|hay|te dejo)\b/.test(t) ||
+      /\bestos\s+son\s+los\b/.test(t) ||
+      /\bencontr[ée]\s+(estos|los siguientes|varios)\b/.test(t) ||
+      /\bhere\s+(are|you go|you have)\b/.test(t) ||
+      /\bthese\s+are\s+the\b/.test(t) ||
+      /\byou'?ll\s+find\b/.test(t) ||
+      /\bi\s+found\s+(these|the following)\b/.test(t) ||
+      /\btap\s+\*?\*?\s*\+\s*add\b/.test(t) ||
+      /\btoca\s+\*?\*?\s*\+\s*agregar\b/.test(t)
+    );
+  }, [text]);
+  const suppressAgentProse =
+    !sections &&
+    ((lowConfidence && proseClaimsProducts) ||
+      (products.length === 0 && proseClaimsProducts));
 
   const [tab, setTab] = useState<Tab>("list");
   const [compareSet, setCompareSet] = useState<Set<string>>(new Set());
@@ -276,17 +357,6 @@ export function ResultBlock({
   useEffect(() => {
     if (tab === "compare" && compareSet.size < 1) setTab("list");
   }, [compareSet, tab]);
-
-  // Pull trace data from the inspector store filtered by this message's tool
-  // call ids. Hide propose_followups — it's a UI-only client tool, not a real
-  // MCP call and showing it in the trace strip is noise.
-  const { entries } = useInspector();
-  const trace = useMemo(() => {
-    const ids = new Set(toolParts.map((t) => t.toolCallId));
-    return entries
-      .filter((e) => ids.has(e.id) && e.name !== "propose_followups")
-      .sort((a, b) => a.startedAt - b.startedAt);
-  }, [entries, toolParts]);
 
   // Derive query string from the first product-yielding tool call's args
   const querySummary = useMemo(() => {
@@ -367,9 +437,18 @@ export function ResultBlock({
               </div>
             </div>
           )}
-          {text && (
+          {text && !suppressAgentProse && (
             <div className="result-prose">
               <Prose>{text}</Prose>
+            </div>
+          )}
+          {suppressAgentProse && (
+            <div className="result-prose result-prose--safe">
+              <p>
+                {userQuery
+                  ? t("result.safe.empty_for_query", { q: userQuery })
+                  : t("result.safe.empty_generic")}
+              </p>
             </div>
           )}
           {followups.length > 0 && (
@@ -423,6 +502,12 @@ export function ResultBlock({
                   {t("result.for_query", { q: querySummary })}
                 </span>
               )
+            )}
+            {omittedNoPrice > 0 && (
+              <span className="result-summary-omitted">
+                {" · "}
+                {t("result.omitted_no_price", { n: omittedNoPrice })}
+              </span>
             )}
           </span>
         </div>
@@ -500,7 +585,7 @@ export function ResultBlock({
                           {t("result.section.results", { n: s.products.length })}
                         </span>
                       </header>
-                      {s.pick && (
+                      {s.pick ? (
                         <>
                           <div className="why-chip">
                             <span className="why-chip-check">✓</span>
@@ -523,6 +608,13 @@ export function ResultBlock({
                             />
                           )}
                         </>
+                      ) : (
+                        s.products.length > 0 && (
+                          <div className="result-section-caveat" role="note">
+                            <strong>{t("result.low_confidence.title")}</strong>
+                            <span>{t("result.low_confidence.body")}</span>
+                          </div>
+                        )
                       )}
                       <HScrollGrid>
                         {s.products.map((p) => (
@@ -568,9 +660,18 @@ export function ResultBlock({
               </>
             ) : (
               <>
-                {text && (
+                {text && !suppressAgentProse && (
                   <div className="result-prose">
                     <Prose>{text}</Prose>
+                  </div>
+                )}
+                {suppressAgentProse && (
+                  <div className="result-prose result-prose--safe">
+                    <p>
+                      {userQuery
+                        ? t("result.safe.mismatch_for_query", { q: userQuery })
+                        : t("result.safe.mismatch_generic")}
+                    </p>
                   </div>
                 )}
                 {lowConfidence && (

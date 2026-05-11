@@ -2,12 +2,12 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import type { Product } from "./extract-products";
+import { useDebouncedStorage } from "./use-debounced-storage";
 
 const STORAGE_KEY = "walmart-mcp:cart";
 const MAX_LINE_QTY = 99;
@@ -74,13 +74,7 @@ function productToItem(p: Product, qty: number): CartItem | null {
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(() => readStorage());
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    } catch {
-      // ignore quota / private mode
-    }
-  }, [items]);
+  useDebouncedStorage(STORAGE_KEY, items);
 
   const add = useCallback((p: Product, qty: number = 1) => {
     setItems((prev) => {
