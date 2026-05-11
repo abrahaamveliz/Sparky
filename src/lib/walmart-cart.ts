@@ -26,6 +26,9 @@ export function buildWalmartCartUrl(items: CartHandoffItem[]): string {
     params.append("qty", String(it.qty));
     params.append("seller", it.seller ?? DEFAULT_SELLER);
   }
-  params.append("redirect", "true");
+  // Note: do NOT append `redirect=true`. As of 2026-05, that flag causes
+  // walmart.com.gt's VTEX checkout to return HTTP 500 ("Se produjo un error
+  // al procesar tu solicitud"). The endpoint already returns a 302 to
+  // /checkout/#/cart on its own once the orderForm cookie is set.
   return `${WALMART_BASE}/checkout/cart/add?${params.toString()}`;
 }
