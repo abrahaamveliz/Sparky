@@ -1,69 +1,75 @@
-import { ComposerPrimitive, useAuiState } from "@assistant-ui/react";
-import { useThreadIsRunning } from "@assistant-ui/core/react";
+import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useChat } from "@/lib/use-chat";
 import { useLocale } from "@/lib/i18n";
 
 const COMPOSER_MAX_CHARS = 4000;
 const COMPOSER_COUNTER_AT = 3500;
 
 export function Composer() {
-  const running = useThreadIsRunning();
+  const { send, isStreaming } = useChat();
   const { t } = useLocale();
-  const text = useAuiState((s: { composer: { text: string } }) => s.composer.text) ?? "";
-  const remaining = COMPOSER_MAX_CHARS - text.length;
-  const showCounter = text.length >= COMPOSER_COUNTER_AT;
+  const [value, setValue] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const remaining = COMPOSER_MAX_CHARS - value.length;
+  const showCounter = value.length >= COMPOSER_COUNTER_AT;
   const overLimit = remaining < 0;
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!value.trim() || isStreaming || overLimit) return;
+    send(value);
+    setValue("");
+    inputRef.current?.focus();
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  }
 
   return (
     <div className="composer-wrap">
-      <ComposerPrimitive.Root className="composer">
-        <ComposerPrimitive.Input
+      <form className="composer" onSubmit={handleSubmit}>
+        <textarea
+          ref={inputRef}
           className="composer-input"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder={
-            running ? t("loading.processing") : t("composer.placeholder")
+            isStreaming ? t("loading.processing") : t("composer.placeholder")
           }
           rows={1}
-          autoFocus
           maxLength={COMPOSER_MAX_CHARS}
+          disabled={isStreaming}
+          autoFocus
           aria-label={t("composer.placeholder")}
         />
         <div className="composer-actions">
-          {running ? (
-            <ComposerPrimitive.Cancel
-              className="composer-send composer-send--cancel"
-              aria-label={t("composer.cancel")}
+          <button
+            type="submit"
+            className="composer-send"
+            disabled={!value.trim() || isStreaming || overLimit}
+            aria-label={t("composer.send")}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <rect x="6" y="6" width="12" height="12" rx="1.5" />
-              </svg>
-            </ComposerPrimitive.Cancel>
-          ) : (
-            <ComposerPrimitive.Send
-              className="composer-send"
-              aria-label={t("composer.send")}
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </ComposerPrimitive.Send>
-          )}
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          </button>
         </div>
-      </ComposerPrimitive.Root>
+      </form>
       <div className="composer-foot">
         <span className="composer-disclaimer">{t("footer.disclaimer")}</span>
         {showCounter && (

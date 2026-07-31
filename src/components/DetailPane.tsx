@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatGTQ } from "@/lib/format";
 import type { Product } from "@/lib/extract-products";
 import { gradientFor } from "./ProductCard";
@@ -66,6 +66,35 @@ export function DetailPane({
     return () => document.removeEventListener("keydown", onKey);
   }, [hasImages, images.length]);
 
+  // Touch swipe support for image gallery
+  const imgRef = useRef<HTMLDivElement>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (images.length <= 1) return;
+    const touch = e.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart.current || images.length <= 1) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStart.current.x;
+    const dy = touch.clientY - touchStart.current.y;
+    touchStart.current = null;
+
+    // Only register horizontal swipes (|dx| > |dy| and |dx| > 40px)
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+      if (dx < 0) {
+        // Swipe left → next image
+        setImgIdx((i) => (i + 1) % images.length);
+      } else {
+        // Swipe right → previous image
+        setImgIdx((i) => (i - 1 + images.length) % images.length);
+      }
+    }
+  };
+
   const visibleSpecs = product.specifications.filter((s) => {
     if (!s.values) return false;
     if (Array.isArray(s.values)) return s.values.length > 0;
@@ -81,7 +110,10 @@ export function DetailPane({
       </button>
       <div className="detail-grid">
         <div
+          ref={imgRef}
           className="detail-img"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
           style={{
             background: hasImages
               ? "#fff"

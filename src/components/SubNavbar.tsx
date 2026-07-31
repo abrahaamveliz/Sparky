@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
-import { ThreadPrimitive } from "@assistant-ui/react";
-import { useThreadIsRunning } from "@assistant-ui/core/react";
+import { useChat } from "@/lib/use-chat";
 import { useLocale } from "@/lib/i18n";
 import { CategoryMegaMenu } from "./CategoryMegaMenu";
 
@@ -27,70 +26,64 @@ const ITEMS: Item[] = [
 
 export function SubNavbar({ onOpenCart }: { onOpenCart: () => void }) {
   const { t } = useLocale();
+  const { send, isStreaming } = useChat();
   const [megaOpen, setMegaOpen] = useState(false);
   const megaTriggerRef = useRef<HTMLButtonElement>(null);
-  const isRunning = useThreadIsRunning();
 
   return (
     <nav className="subnav" aria-label={t("subnav.aria_label")}>
       <div className="subnav-wrap">
         <div className="subnav-row">
           {ITEMS.map((item, i) => {
-          if (item.kind === "mega") {
-            return (
-              <div key={i} className="subnav-mega-wrap">
+            if (item.kind === "mega") {
+              return (
+                <div key={i} className="subnav-mega-wrap">
+                  <button
+                    ref={megaTriggerRef}
+                    type="button"
+                    className={`subnav-pill ${megaOpen ? "is-open" : ""}`}
+                    onClick={() => setMegaOpen((o) => !o)}
+                    aria-expanded={megaOpen}
+                  >
+                    {t(item.labelKey)}
+                    <span className="subnav-chev" aria-hidden="true">
+                      ▾
+                    </span>
+                  </button>
+                  <CategoryMegaMenu
+                    open={megaOpen}
+                    onClose={() => setMegaOpen(false)}
+                    anchorRef={megaTriggerRef}
+                  />
+                </div>
+              );
+            }
+            if (item.kind === "cart") {
+              return (
                 <button
-                  ref={megaTriggerRef}
+                  key={i}
                   type="button"
-                  className={`subnav-pill ${megaOpen ? "is-open" : ""}`}
-                  onClick={() => setMegaOpen((o) => !o)}
-                  aria-expanded={megaOpen}
+                  className="subnav-pill"
+                  onClick={onOpenCart}
                 >
                   {t(item.labelKey)}
-                  <span className="subnav-chev" aria-hidden="true">
-                    ▾
-                  </span>
                 </button>
-                <CategoryMegaMenu
-                  open={megaOpen}
-                  onClose={() => setMegaOpen(false)}
-                  anchorRef={megaTriggerRef}
-                />
-              </div>
-            );
-          }
-          if (item.kind === "cart") {
+              );
+            }
+            // chat
             return (
               <button
                 key={i}
                 type="button"
                 className="subnav-pill"
-                onClick={onOpenCart}
+                disabled={isStreaming}
+                aria-disabled={isStreaming}
+                onClick={() => send(t(item.promptKey))}
               >
                 {t(item.labelKey)}
               </button>
             );
-          }
-          // chat
-          return (
-            <ThreadPrimitive.Suggestion
-              key={i}
-              prompt={t(item.promptKey)}
-              method="replace"
-              autoSend
-              asChild
-            >
-              <button
-                type="button"
-                className="subnav-pill"
-                disabled={isRunning}
-                aria-disabled={isRunning}
-              >
-                {t(item.labelKey)}
-              </button>
-            </ThreadPrimitive.Suggestion>
-          );
-        })}
+          })}
         </div>
       </div>
     </nav>

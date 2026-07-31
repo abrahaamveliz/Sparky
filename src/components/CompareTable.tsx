@@ -23,6 +23,7 @@ function specRows(products: Product[]): { label: string; values: string[] }[] {
   for (const p of products) {
     for (const s of p.specifications) {
       if (!s.name || !s.values) continue;
+      if (s.name.startsWith("_")) continue;
       if (Array.isArray(s.values) && s.values.length === 0) continue;
       counts.set(s.name, (counts.get(s.name) ?? 0) + 1);
     }

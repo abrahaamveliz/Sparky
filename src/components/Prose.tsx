@@ -10,6 +10,7 @@ const LEAK_MARKERS = [
   /<tool_result[\s>]/, // raw <tool_result ...>
   /<\w+_results?>/, // <search_products_results>, <tool_input_result>, etc.
   /\n?<tool_use[\s>]/, // un-stripped tool_use opener
+  /\n?<tool_call[\s>]/, // raw <tool_call ...> from proxy leaks
 ];
 
 function stripLeaks(s: string): string {
@@ -99,6 +100,14 @@ export function Prose({ children }: { children: string }) {
           ol: ({ ...props }) => <ol className="prose-ol" {...props} />,
           a: ({ ...props }) => (
             <a target="_blank" rel="noreferrer" {...props} />
+          ),
+          table: ({ ...props }) => (
+            <div className="prose-table-wrap">
+              <table {...props} />
+            </div>
+          ),
+          img: ({ ...props }) => (
+            <img style={{ maxWidth: "100%", height: "auto" }} {...props} />
           ),
         }}
       >

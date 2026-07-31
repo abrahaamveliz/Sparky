@@ -54,8 +54,8 @@ const es: Dict = {
   "subnav.ofertas.prompt": "mostrame las mejores ofertas y rollbacks",
   "subnav.recetas": "Recetas",
   "subnav.recetas.prompt": "dame ideas de recetas con ingredientes del catálogo",
-  "subnav.entrega": "Entrega rápida",
-  "subnav.entrega.prompt": "productos con entrega rápida",
+  "subnav.entrega": "Envío y recogida",
+  "subnav.entrega.prompt": "¿cómo funciona el envío y la recogida? ¿cómo completo mi pedido?",
   "subnav.farmacia": "Farmacia",
   "subnav.farmacia.prompt": "productos de farmacia",
   "subnav.nuevos": "Nuevos",
@@ -67,12 +67,12 @@ const es: Dict = {
   "subnav.comidas": "Comidas fáciles",
   "subnav.comidas.prompt": "ideas de comidas rápidas y fáciles",
   "subnav.mis_items": "Mis ítems",
-  "subnav.solo_gt": "Solo en GT",
+  "subnav.solo_gt": "Solo en Walmart",
   "subnav.solo_gt.prompt":
     "mostrame productos de las marcas exclusivas de Walmart: Great Value, Parent's Choice, Equate, Mainstays y Athletic Works",
   "subnav.tarjeta": "Pagos",
   "subnav.tarjeta.prompt":
-    "¿cómo se hacen los pagos? ¿Sparky procesa la compra o me redirige a otro lado?",
+    "¿cómo funciona el proceso de pago? ¿dónde pago mi pedido?",
 
   // mega-menu
   "mega.see_all": "Ver todo en",
@@ -163,6 +163,10 @@ const es: Dict = {
     "Personalizado según tus preferencias · {chosen}",
 
 
+
+  "result.showing_count": "Mostrando {shown} de {total} productos",
+  "result.load_more": "Cargar más",
+  "result.loading_more": "Cargando…",
 
   "result.followups.label": "¿Quieres que…?",
   "result.followups.sort_price": "Ordenar por precio ↑",
@@ -343,8 +347,8 @@ const en: Dict = {
   "subnav.ofertas.prompt": "show me the best deals and rollbacks",
   "subnav.recetas": "Recipes",
   "subnav.recetas.prompt": "give me recipe ideas with catalog ingredients",
-  "subnav.entrega": "Fast delivery",
-  "subnav.entrega.prompt": "products with fast delivery",
+  "subnav.entrega": "Shipping & pickup",
+  "subnav.entrega.prompt": "how does shipping and pickup work? how do I complete my order?",
   "subnav.farmacia": "Pharmacy",
   "subnav.farmacia.prompt": "pharmacy products",
   "subnav.nuevos": "New",
@@ -356,12 +360,12 @@ const en: Dict = {
   "subnav.comidas": "Easy meals",
   "subnav.comidas.prompt": "quick and easy meal ideas",
   "subnav.mis_items": "My items",
-  "subnav.solo_gt": "Only in GT",
+  "subnav.solo_gt": "Only at Walmart",
   "subnav.solo_gt.prompt":
     "show me products from Walmart's exclusive brands: Great Value, Parent's Choice, Equate, Mainstays and Athletic Works",
   "subnav.tarjeta": "Payments",
   "subnav.tarjeta.prompt":
-    "how do payments work? does Sparky charge me or redirect me somewhere else?",
+    "how does the payment process work? where do I pay for my order?",
 
   // mega-menu
   "mega.see_all": "See all in",
@@ -448,6 +452,10 @@ const en: Dict = {
     "Tailored to your preferences · swapped {original} for {chosen}",
   "substitution.brand":
     "Personalized to your preferences · {chosen}",
+
+  "result.showing_count": "Showing {shown} of {total} products",
+  "result.load_more": "Load more",
+  "result.loading_more": "Loading…",
 
   "result.followups.label": "Want to…?",
   "result.followups.sort_price": "Sort by price ↑",

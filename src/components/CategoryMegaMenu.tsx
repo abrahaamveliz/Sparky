@@ -6,30 +6,41 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { ThreadPrimitive } from "@assistant-ui/react";
+import { useChat } from "@/lib/use-chat";
 import { useLocale } from "@/lib/i18n";
 import { WALMART_CATEGORIES } from "@/lib/walmart-categories";
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  /** The button that triggered the popover. Used to anchor positioning and
-   *  to whitelist clicks on it (so toggling-via-the-button still works
-   *  without the outside-click handler immediately re-closing). */
   anchorRef: RefObject<HTMLElement | null>;
 };
 
 const POPOVER_WIDTH = 760;
 const VIEWPORT_MARGIN = 16;
 
+/** Breakpoint matching the CSS max-width:767px mobile sheet override. */
+function useIsMobile() {
+  const [mobile, setMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 768,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const onChange = () => setMobile(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return mobile;
+}
+
 export function CategoryMegaMenu({ open, onClose, anchorRef }: Props) {
   const { t } = useLocale();
+  const { send } = useChat();
   const ref = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(WALMART_CATEGORIES[0]?.slug ?? "");
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const isMobile = useIsMobile();
 
-  // Compute popover position from the anchor's bounding rect — recompute on
-  // resize/scroll so the popover follows the trigger if the layout shifts.
   useLayoutEffect(() => {
     if (!open) {
       setPos(null);
@@ -53,8 +64,6 @@ export function CategoryMegaMenu({ open, onClose, anchorRef }: Props) {
     };
   }, [open, anchorRef]);
 
-  // Outside-click + Esc to close. The anchor is whitelisted so clicking the
-  // trigger button to toggle the popover doesn't trigger a double-close.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -80,6 +89,93 @@ export function CategoryMegaMenu({ open, onClose, anchorRef }: Props) {
     WALMART_CATEGORIES.find((c) => c.slug === active) ?? WALMART_CATEGORIES[0];
   if (!activeCat) return null;
 
+  const handleCategoryClick = (slug: string) => {
+    // On mobile: toggle accordion (tap same = collapse)
+    if (isMobile) {
+      setActive((prev) => (prev === slug ? "" : slug));
+    } else {
+      setActive(slug);
+    }
+  };
+
+  const handleSubClick = (parentSlug: string, subName: string, subSlug: string) => {
+    send(
+      t("mega.search_sub", { category: subName }) +
+      ` [category:${parentSlug}/${subSlug}]`,
+    );
+    onClose();
+  };
+
+  const handleSeeAll = (cat: typeof activeCat) => {
+    send(
+      t("mega.search_all", { category: cat.name }) +
+      ` [category:${cat.slug}]`,
+    );
+    onClose();
+  };
+
+  // Mobile: accordion layout — subcategories expand inline below each category
+  if (isMobile) {
+    return createPortal(
+      <div
+        className="cat-mega cat-mega--mobile"
+        role="dialog"
+        aria-label={t("subnav.categorias")}
+        ref={ref}
+        style={{ position: "fixed", top: pos.top, left: pos.left }}
+      >
+        <div className="cat-mega-list cat-mega-list--accordion">
+          {WALMART_CATEGORIES.map((c) => {
+            const isExpanded = active === c.slug;
+            return (
+              <div key={c.slug} className="cat-mega-accordion-item">
+                <button
+                  type="button"
+                  className={`cat-mega-cat ${isExpanded ? "is-active" : ""}`}
+                  onClick={() => handleCategoryClick(c.slug)}
+                >
+                  <span className="cat-mega-cat-name">{c.name}</span>
+                  <span
+                    className={`cat-mega-accordion-chev ${isExpanded ? "is-open" : ""}`}
+                    aria-hidden="true"
+                  >
+                    ›
+                  </span>
+                </button>
+                {isExpanded && (
+                  <div className="cat-mega-accordion-subs">
+                    <button
+                      type="button"
+                      className="cat-mega-sub cat-mega-sub--all"
+                      onClick={() => handleSeeAll(c)}
+                    >
+                      {t("mega.see_all")} {c.name} →
+                    </button>
+                    {c.children.length === 0 && (
+                      <span className="cat-mega-empty">{t("mega.no_subs")}</span>
+                    )}
+                    {c.children.map((s) => (
+                      <button
+                        key={s.slug}
+                        type="button"
+                        className="cat-mega-sub"
+                        onClick={() => handleSubClick(c.slug, s.name, s.slug)}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
+  // Desktop: side-by-side layout (unchanged)
   return createPortal(
     <div
       className="cat-mega"
@@ -95,6 +191,7 @@ export function CategoryMegaMenu({ open, onClose, anchorRef }: Props) {
             type="button"
             className={`cat-mega-cat ${c.slug === active ? "is-active" : ""}`}
             onMouseEnter={() => setActive(c.slug)}
+            onClick={() => setActive(c.slug)}
             onFocus={() => setActive(c.slug)}
           >
             <span className="cat-mega-cat-name">{c.name}</span>
@@ -108,39 +205,25 @@ export function CategoryMegaMenu({ open, onClose, anchorRef }: Props) {
       <div className="cat-mega-subs">
         <div className="cat-mega-subs-title">{activeCat.name}</div>
         <div className="cat-mega-subs-grid">
-          <ThreadPrimitive.Suggestion
-            prompt={t("mega.search_all", { category: activeCat.name })}
-            method="replace"
-            autoSend
-            asChild
+          <button
+            type="button"
+            className="cat-mega-sub cat-mega-sub--all"
+            onClick={() => handleSeeAll(activeCat)}
           >
-            <button
-              type="button"
-              className="cat-mega-sub cat-mega-sub--all"
-              onClick={onClose}
-            >
-              {t("mega.see_all")} {activeCat.name} →
-            </button>
-          </ThreadPrimitive.Suggestion>
+            {t("mega.see_all")} {activeCat.name} →
+          </button>
           {activeCat.children.length === 0 && (
             <span className="cat-mega-empty">{t("mega.no_subs")}</span>
           )}
           {activeCat.children.map((s) => (
-            <ThreadPrimitive.Suggestion
+            <button
               key={s.slug}
-              prompt={t("mega.search_sub", { category: s.name })}
-              method="replace"
-              autoSend
-              asChild
+              type="button"
+              className="cat-mega-sub"
+              onClick={() => handleSubClick(activeCat.slug, s.name, s.slug)}
             >
-              <button
-                type="button"
-                className="cat-mega-sub"
-                onClick={onClose}
-              >
-                {s.name}
-              </button>
-            </ThreadPrimitive.Suggestion>
+              {s.name}
+            </button>
           ))}
         </div>
       </div>

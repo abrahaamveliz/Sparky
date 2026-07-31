@@ -1,13 +1,12 @@
-import { useState } from "react";
-import { ComposerPrimitive } from "@assistant-ui/react";
+import { useState, useRef, type FormEvent, type KeyboardEvent } from "react";
 import { Spark } from "./Spark";
 import { CartButton } from "./CartButton";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { DeliveryPopover } from "./DeliveryPopover";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useLocale } from "@/lib/i18n";
+import { useChat } from "@/lib/use-chat";
 import { LOGO_URL, PRODUCT_NAME } from "@/lib/product-name";
-import { useChatHistory } from "@/lib/chat-history-store";
 
 export function Topbar({
   onOpenCart,
@@ -17,9 +16,27 @@ export function Topbar({
   onOpenPrefs: () => void;
 }) {
   const { t } = useLocale();
+  const { send, clear, messages, isStreaming } = useChat();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const { hasMessages, newConversation, deleteChat } = useChatHistory();
+  const [searchValue, setSearchValue] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const hasMessages = messages.length > 0;
+
+  function handleSearch(e: FormEvent) {
+    e.preventDefault();
+    if (!searchValue.trim() || isStreaming) return;
+    send(searchValue);
+    setSearchValue("");
+  }
+
+  function handleSearchKey(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSearch(e);
+    }
+  }
 
   return (
     <header className="topbar">
@@ -64,13 +81,18 @@ export function Topbar({
         />
       </div>
 
-      <ComposerPrimitive.Root className="navbar-search">
-        <ComposerPrimitive.Input
+      <form className="navbar-search" onSubmit={handleSearch}>
+        <input
+          ref={searchRef}
           className="navbar-search-input"
+          type="text"
+          value={searchValue}
+          onChange={(e) => setSearchValue(e.target.value)}
+          onKeyDown={handleSearchKey}
           placeholder={t("topbar.search.placeholder")}
-          rows={1}
         />
-        <ComposerPrimitive.Send
+        <button
+          type="submit"
           className="navbar-search-submit"
           aria-label={t("topbar.search.submit")}
         >
@@ -78,14 +100,31 @@ export function Topbar({
             <circle cx="11" cy="11" r="7" />
             <path d="M21 21l-4.3-4.3" />
           </svg>
-        </ComposerPrimitive.Send>
-      </ComposerPrimitive.Root>
+        </button>
+      </form>
 
       <div className="topbar-right">
         <button
           type="button"
+          className="topbar-icon-btn topbar-search-mobile"
+          onClick={() => {
+            const el = document.querySelector(".composer-input") as HTMLTextAreaElement;
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              el.focus();
+            }
+          }}
+          aria-label={t("topbar.search.placeholder")}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+        </button>
+        <button
+          type="button"
           className="topbar-icon-btn"
-          onClick={newConversation}
+          onClick={clear}
           title={t("chat.new")}
           aria-label={t("chat.new")}
         >
@@ -153,7 +192,7 @@ export function Topbar({
         variant="danger"
         onConfirm={() => {
           setConfirmDeleteOpen(false);
-          deleteChat();
+          clear();
         }}
         onCancel={() => setConfirmDeleteOpen(false)}
       />
