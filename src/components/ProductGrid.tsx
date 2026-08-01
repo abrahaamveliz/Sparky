@@ -140,7 +140,7 @@ export function ProductGrid({
 
   return (
     <div className="result">
-      {compared.length >= 2 && (
+      {compared.length >= 1 ? (
         <CompareTable
           products={compared}
           allProducts={products}
@@ -152,41 +152,46 @@ export function ProductGrid({
             });
           }}
           onAdd={toggleCompare}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={loadMore}
         />
-      )}
+      ) : (
+        <>
+          <HScrollGrid>
+            {products.map((product) => (
+              <ProductCard
+                key={product.productId}
+                product={product}
+                onCompare={toggleCompare}
+                onDetail={setDetailProduct}
+                compared={compareSet.has(product.productId)}
+              />
+            ))}
+          </HScrollGrid>
 
-      <HScrollGrid>
-        {products.map((product) => (
-          <ProductCard
-            key={product.productId}
-            product={product}
-            onCompare={toggleCompare}
-            onDetail={setDetailProduct}
-            compared={compareSet.has(product.productId)}
-          />
-        ))}
-      </HScrollGrid>
-
-      {hasMore && (
-        <div className="pgrid-pagination">
-          {!loadingMore && (
-            <span className="pgrid-count">
-              {t("result.showing_count", {
-                shown: String(products.length),
-                total: String(searchMeta!.total),
-              })}
-            </span>
+          {hasMore && (
+            <div className="pgrid-pagination">
+              {!loadingMore && (
+                <span className="pgrid-count">
+                  {t("result.showing_count", {
+                    shown: String(products.length),
+                    total: String(searchMeta!.total),
+                  })}
+                </span>
+              )}
+              <button
+                type="button"
+                className="pgrid-load-more"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore && <span className="spinner-sm" />}
+                {loadingMore ? t("result.loading_more") : t("result.load_more")}
+              </button>
+            </div>
           )}
-          <button
-            type="button"
-            className="pgrid-load-more"
-            onClick={loadMore}
-            disabled={loadingMore}
-          >
-            {loadingMore && <span className="spinner-sm" />}
-            {loadingMore ? t("result.loading_more") : t("result.load_more")}
-          </button>
-        </div>
+        </>
       )}
 
       {detailProduct && (

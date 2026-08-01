@@ -308,13 +308,21 @@ async def _agent_loop(
 
         messages.append({"role": "user", "content": tool_results_for_model})
 
-        # If the model wants to stop after tools, check stop_reason
+        # Stop the loop when the turn is logically complete:
+        # - model signaled end_turn
+        # - propose_followups was called AND the model already wrote prose
+        #   (if it called propose_followups without text, let the loop
+        #   continue so the model can write its summary after seeing
+        #   tool results — breaking early leaves the user with no prose)
         if stop_reason == "end_turn":
             break
-
-        # Only break on propose_followups if it was the ONLY tool call
-        real_tools = [t for t in tool_uses if t["name"] != "propose_followups"]
-        if not real_tools and any(t["name"] == "propose_followups" for t in tool_uses):
+        has_followups = any(t["name"] == "propose_followups" for t in tool_uses)
+        has_prose = bool(text_buffer.strip())
+        if has_followups and has_prose:
+            break
+        # If propose_followups was the ONLY tool (no product tools) and
+        # there's no prose, the model is just emitting chips — stop.
+        if has_followups and not any(t["name"] in _PRODUCT_TOOLS for t in tool_uses):
             break
 
     yield _sse("done", {})

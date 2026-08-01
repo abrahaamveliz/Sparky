@@ -51,12 +51,18 @@ export function CompareTable({
   onRemove,
   onAdd,
   maxCompare = 4,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: {
   products: Product[];
   allProducts: Product[];
   onRemove: (productId: string) => void;
   onAdd: (p: Product) => void;
   maxCompare?: number;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
 }) {
   const { t } = useLocale();
   const cheapest = useMemo(() => {
@@ -87,7 +93,7 @@ export function CompareTable({
             {t("compare.add_more")}
           </div>
           <div className="ctable-candidates-row">
-            {candidates.slice(0, 16).map((p) => {
+            {candidates.map((p) => {
               const img = p.images[0]?.imageUrl;
               return (
                 <button
@@ -116,6 +122,17 @@ export function CompareTable({
                 </button>
               );
             })}
+            {hasMore && onLoadMore && (
+              <button
+                type="button"
+                className="ccandidate ccandidate-loadmore"
+                onClick={onLoadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore && <span className="spinner-sm" />}
+                {loadingMore ? t("result.loading_more") : t("result.load_more")}
+              </button>
+            )}
           </div>
         </div>
       )}

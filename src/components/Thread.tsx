@@ -111,11 +111,6 @@ function MessageBubble({ message, isStreaming = false, showThinking = false }: {
   // Show skeleton while any product tool call is pending
   const showSkeleton = isStreaming && hasPendingProductTools;
 
-  // Placeholder text while waiting for the model's prose
-  const placeholderText = showProducts && !hasText
-    ? buildPlaceholder(message)
-    : null;
-
   return (
     <div className="msg msg-assistant">
       <div className="msg-avatar msg-avatar-bot">
@@ -136,20 +131,11 @@ function MessageBubble({ message, isStreaming = false, showThinking = false }: {
           <ResultLoading query={extractQueryFromToolCalls(message)} />
         )}
         {showProducts && <ProductGrid products={products} searchMeta={searchMeta} />}
-        {hasText ? (
+        {hasText && (
           <div className="msg-text">
             <Prose>{message.content}</Prose>
           </div>
-        ) : placeholderText ? (
-          <div className="msg-text msg-text-placeholder">
-            <span>{placeholderText}</span>
-            <span className="placeholder-dots">
-              <span className="dot-anim" />
-              <span className="dot-anim" />
-              <span className="dot-anim" />
-            </span>
-          </div>
-        ) : null}
+        )}
         {followups.length > 0 && <FollowupChips suggestions={followups} />}
       </div>
     </div>
@@ -297,24 +283,6 @@ function extractQueryFromToolCalls(msg: ChatMessage): string | undefined {
   return undefined;
 }
 
-/** Build a quick placeholder line from the product results while waiting for the model's prose. */
-function buildPlaceholder(msg: ChatMessage): string | null {
-  if (!msg.toolResults) return null;
-
-  for (const tr of msg.toolResults) {
-    if (tr.name === "search_products" || tr.name === "browse_category") {
-      const result = tr.result as Record<string, unknown> | null;
-      if (!result || tr.is_error) continue;
-      const products = (result as any).products;
-      const total = (result as any).total;
-      const count = typeof total === "number" ? total : Array.isArray(products) ? products.length : 0;
-      if (count > 0) {
-        return `${count} productos encontrados`;
-      }
-    }
-  }
-  return null;
-}
 
 function ThinkingDots() {
   const { t } = useLocale();
