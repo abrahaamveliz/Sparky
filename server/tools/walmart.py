@@ -115,6 +115,95 @@ def _trim_category(node: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ── subcategory coherence filter ───────────────────────────────────────
+#
+# VTEX full-text search matches substrings across the entire product name,
+# so a query like "aceite vegetal" returns both cooking oil AND canned tuna
+# that mentions "aceite vegetal" in its description ("Atún en aceite
+# vegetal"). Similarly, "papa" matches "papaya".
+#
+# The fix: use VTEX's own category taxonomy as the source of truth.  Every
+# product comes with a `categories` field containing full paths like
+# "/Abarrotes/Aceites de cocina/Aceite de Semillas y Vegetal/".  Products
+# that are genuinely what the user searched for cluster in the same leaf
+# subcategory.  Products that merely mention the search term in their name
+# live in a different subcategory (tuna → "Atún y Pescado", papaya →
+# "Papayas y tropicales").
+#
+# Algorithm:
+# 1. Extract the leaf subcategory (deepest path segment) for each product
+# 2. Find the dominant subcategory (most common leaf, ≥ 40% of results)
+# 3. Drop products whose leaf doesn't match the dominant
+# 4. Fall back to unfiltered if no clear dominant or if filtering would
+#    remove everything
+
+def _mid_subcategory(categories: list[str]) -> str | None:
+    """Extract the mid-level (second segment) subcategory from VTEX category
+    paths like "/Frutas y Verduras/Verduras/Papas Enteras/".
+
+    The mid-level is the best discriminator because:
+    - Level 0 (top) is the shelf we already filter by (e.g. "Abarrotes")
+    - Level 1 (mid) groups products by type ("Verduras" vs "Frutas",
+      "Aceites de cocina" vs "Enlatados y Conservas")
+    - Level 2+ (leaf) splits the same type into variants ("Papas Enteras"
+      vs "Cebollas, papas y verduras de raíz") which fragments the count
+
+    Each product has multiple category paths at different depths.  We pick
+    the depth-2 path's second segment (index 1), which is the mid-level
+    subcategory.
+    """
+    for cat_path in categories:
+        segments = [s for s in cat_path.strip("/").split("/") if s]
+        if len(segments) >= 2:
+            return segments[1]
+    return None
+
+
+def _filter_by_subcategory(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep only products in the dominant leaf subcategory.
+
+    This removes cross-category noise from VTEX full-text search without
+    any name-based heuristics — it uses the catalog's own taxonomy as the
+    authority on what a product IS.
+
+    Returns the filtered list, or the original list unchanged if:
+    - fewer than 3 products (not enough signal for a dominant)
+    - no clear dominant (< 40% of products share the same leaf)
+    - filtering would remove all products
+    """
+    if len(products) < 3:
+        return products
+
+    # Count mid-level subcategories
+    mid_counts: dict[str, int] = {}
+    product_mids: list[str | None] = []
+    for p in products:
+        mid = _mid_subcategory(p.get("categories", []))
+        product_mids.append(mid)
+        if mid:
+            mid_counts[mid] = mid_counts.get(mid, 0) + 1
+
+    if not mid_counts:
+        return products
+
+    # Find the most common mid-level subcategory
+    dominant_mid = max(mid_counts, key=lambda k: mid_counts[k])
+    dominant_count = mid_counts[dominant_mid]
+
+    # Require the dominant to represent ≥ 40% of products
+    if dominant_count / len(products) < 0.4:
+        return products
+
+    # Filter to only products in the dominant subcategory
+    filtered = [
+        p for p, mid in zip(products, product_mids)
+        if mid == dominant_mid
+    ]
+
+    # Never return empty — fall back to unfiltered
+    return filtered if filtered else products
+
+
 # ── reusable search (used by both the tool and the pagination endpoint) ─
 
 async def do_product_search(
@@ -144,11 +233,19 @@ async def do_product_search(
     resp = await _get(path, params)
     total = _total_from_resources(resp.headers.get("resources"))
     raw_products = resp.json() or []
+    products = [_transform(p) for p in raw_products]
+
+    # Apply subcategory coherence filter when a text query was used.
+    # This removes cross-category noise (e.g. tuna from an oil search)
+    # using the catalog's own taxonomy rather than name heuristics.
+    if query:
+        products = _filter_by_subcategory(products)
+
     return {
         "total": total,
         "start": start,
-        "end": start + len(raw_products) - 1 if raw_products else start,
-        "products": [_transform(p) for p in raw_products],
+        "end": start + len(products) - 1 if products else start,
+        "products": products,
     }
 
 

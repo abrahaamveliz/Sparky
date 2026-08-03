@@ -1,0 +1,17 @@
+[Unit]
+Description=Sparky (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=abrahaam
+WorkingDirectory=/home/abrahaam/services/sparky
+ExecStart=/home/abrahaam/services/sparky/.venv/bin/python -m server.main
+Restart=on-failure
+RestartSec=5
+Environment=ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8000
+
+[Install]
+WantedBy=multi-user.target
