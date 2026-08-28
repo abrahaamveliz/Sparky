@@ -22,10 +22,6 @@ function ChatShell() {
     <ChatProvider locale={locale} preferences={preferences as Record<string, unknown>}>
       <CartProvider>
         <div className="app">
-          <div className="demo-banner">
-            Demo creada por{" "}
-            <a href="mailto:velizabrahaam@gmail.com">velizabrahaam@gmail.com</a>
-          </div>
           <SkipLink />
           <Topbar
             onOpenCart={() => setCartOpen(true)}

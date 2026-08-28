@@ -17,12 +17,14 @@ import json
 import re
 from typing import Any, AsyncGenerator
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from server.agent import Agent
 from server.tools import get_tools
 from server.prompts import build_system_prompt
+from server.security.challenge import require_challenge
+from server.security.rate_limit import check_rate_limit
 
 router = APIRouter()
 
@@ -329,11 +331,26 @@ async def _agent_loop(
 
 
 @router.post("/api/chat")
-async def chat(request: Request) -> StreamingResponse:
-    body = await request.json()
+async def chat(
+    request: Request,
+    _challenge=Depends(require_challenge),
+    _rl=Depends(check_rate_limit),
+) -> StreamingResponse:
+    raw_body = await request.body()
+    MAX_BODY_BYTES = 50_000
+    if len(raw_body) > MAX_BODY_BYTES:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "Request too large"}, status_code=413)
+
+    body = json.loads(raw_body)
     user_messages: list[dict[str, Any]] = body.get("messages", [])
     locale: str = body.get("locale", "es")
     preferences: dict[str, Any] | None = body.get("preferences")
+
+    # Cap conversation length
+    MAX_MESSAGES = 100
+    if len(user_messages) > MAX_MESSAGES:
+        user_messages = user_messages[-MAX_MESSAGES:]
 
     system = build_system_prompt(locale=locale, preferences=preferences)
 
@@ -365,8 +382,8 @@ async def chat(request: Request) -> StreamingResponse:
         "name": "propose_followups",
         "description": (
             "Call at the END of every turn to suggest 2-4 followup actions. "
-            "Each has a short label (max 4 words, UI locale) and a prompt "
-            "(full message in Spanish)."
+            "Each has a short label (max 4 words) and a prompt "
+            "(full message). BOTH label and prompt must match the UI locale."
         ),
         "input_schema": {
             "type": "object",
@@ -376,8 +393,8 @@ async def chat(request: Request) -> StreamingResponse:
                     "items": {
                         "type": "object",
                         "properties": {
-                            "label": {"type": "string", "description": "Short chip label, max 4 words."},
-                            "prompt": {"type": "string", "description": "Full message in Spanish."},
+                            "label": {"type": "string", "description": "Short chip label, max 4 words, in the UI locale."},
+                            "prompt": {"type": "string", "description": "Full message in the UI locale (English or Spanish)."},
                         },
                         "required": ["label", "prompt"],
                     },

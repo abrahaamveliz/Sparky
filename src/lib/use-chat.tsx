@@ -18,6 +18,58 @@ import {
   type ReactNode,
 } from "react";
 
+// Turnstile site key (set via VITE_ env var)
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as
+  | string
+  | undefined;
+
+/**
+ * Render an invisible Turnstile widget and resolve with the response
+ * token. Falls back to undefined when Turnstile is not configured or
+ * the script hasn't loaded yet.
+ *
+ * The container must be in the DOM and not display:none — invisible
+ * Turnstile still needs a live element to execute its challenge. We
+ * position it off-screen so it doesn't affect layout.
+ */
+function getTurnstileToken(): Promise<string | undefined> {
+  const turnstile = (window as any).turnstile;
+  if (!turnstile || !TURNSTILE_SITE_KEY) return Promise.resolve(undefined);
+
+  return new Promise<string | undefined>((resolve) => {
+    let settled = false;
+    const done = (token: string | undefined) => {
+      if (settled) return;
+      settled = true;
+      // Clean up the container after resolving
+      setTimeout(() => {
+        turnstile.remove(widgetId);
+        container.remove();
+      }, 100);
+      resolve(token);
+    };
+
+    // Container must be visible in the DOM for Turnstile to run,
+    // but positioned off-screen so the user sees nothing.
+    const container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.left = "-9999px";
+    container.style.top = "-9999px";
+    document.body.appendChild(container);
+
+    const widgetId = turnstile.render(container, {
+      sitekey: TURNSTILE_SITE_KEY,
+      size: "invisible",
+      callback: (token: string) => done(token),
+      "error-callback": () => done(undefined),
+      "expired-callback": () => done(undefined),
+    });
+
+    // Safety timeout — if Turnstile hangs, don't block the chat forever
+    setTimeout(() => done(undefined), 10_000);
+  });
+}
+
 export type ToolCall = {
   id: string;
   name: string;
@@ -260,10 +312,37 @@ export function ChatProvider({
       setMessages((prev) => [...prev, assistantMsg]);
 
       try {
+        // Step 1: Acquire a one-time challenge token (anti-replay)
+        let challengeToken: string | undefined;
+        try {
+          const turnstileToken = await getTurnstileToken();
+          const challengeRes = await fetch("/api/challenge", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ turnstile: turnstileToken }),
+            signal: controller.signal,
+          });
+          if (challengeRes.ok) {
+            const challengeData = await challengeRes.json();
+            challengeToken = challengeData.challenge;
+          }
+        } catch {
+          // If challenge fails, try the chat request anyway — the server
+          // will reject it if challenge validation is enforced.
+        }
+
+        // Step 2: Send chat request with challenge header
         const apiMessages = toApiMessages(allMessages);
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (challengeToken) {
+          headers["X-Challenge"] = challengeToken;
+        }
+
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             messages: apiMessages,
             locale,

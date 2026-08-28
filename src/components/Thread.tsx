@@ -4,7 +4,7 @@ import { useLocale } from "@/lib/i18n";
 import { Spark } from "./Spark";
 import { Hero } from "./Hero";
 import { Prose } from "./Prose";
-import { ProductGrid } from "./ProductGrid";
+import { ResultBlock, type ToolPart } from "./ResultBlock";
 import { FollowupChips } from "./FollowupChips";
 import { ResultLoading } from "./ResultLoading";
 import { AGENT_AVATAR_URL } from "@/lib/product-name";
@@ -90,9 +90,10 @@ function MessageBubble({ message, isStreaming = false, showThinking = false }: {
   }
 
   // Assistant message
-  const { products, searchMeta } = extractProductsAndMeta(message);
+  const toolParts = buildToolParts(message);
+  const hasProductTools = toolParts.some((tp) => PRODUCT_TOOLS.has(tp.toolName));
+  const searchMeta = extractSearchMeta(message);
   const followups = extractFollowups(message);
-  const hasProducts = products.length > 0;
   const hasText = message.content.trim().length > 0;
 
   // Check if any product tool calls are still pending (result not yet received)
@@ -103,10 +104,8 @@ function MessageBubble({ message, isStreaming = false, showThinking = false }: {
   );
   const hasPendingProductTools = isStreaming && pendingProductToolIds.length > 0;
 
-  // Don't show products until ALL product tool calls are resolved — prevents
-  // the "flash of wrong products" when an early result is from a retry-failed
-  // search and will be replaced by the next result.
-  const showProducts = hasProducts && !hasPendingProductTools;
+  // Don't show ResultBlock until ALL product tool calls are resolved
+  const showResultBlock = hasProductTools && !hasPendingProductTools;
 
   // Show skeleton while any product tool call is pending
   const showSkeleton = isStreaming && hasPendingProductTools;
@@ -130,13 +129,21 @@ function MessageBubble({ message, isStreaming = false, showThinking = false }: {
         {showSkeleton && (
           <ResultLoading query={extractQueryFromToolCalls(message)} />
         )}
-        {showProducts && <ProductGrid products={products} searchMeta={searchMeta} />}
-        {hasText && (
+        {showResultBlock && (
+          <ResultBlock
+            toolParts={toolParts}
+            text={hasText ? message.content : null}
+            searchMeta={searchMeta}
+          />
+        )}
+        {/* Standalone prose only when ResultBlock is NOT rendering (it handles its own) */}
+        {!hasProductTools && hasText && (
           <div className="msg-text">
             <Prose>{message.content}</Prose>
           </div>
         )}
-        {followups.length > 0 && <FollowupChips suggestions={followups} />}
+        {/* Followups for non-product turns (ResultBlock handles its own) */}
+        {!hasProductTools && followups.length > 0 && <FollowupChips suggestions={followups} />}
       </div>
     </div>
   );
@@ -157,58 +164,70 @@ export type SearchMeta = {
   };
 };
 
-function extractProductsAndMeta(msg: ChatMessage): {
-  products: Record<string, unknown>[];
-  searchMeta?: SearchMeta;
-} {
-  if (!msg.toolResults) return { products: [] };
+/** Build the ToolPart[] array that ResultBlock expects from a ChatMessage.
+ *  Merges toolCalls with their matching toolResults. Also picks up any
+ *  toolResults that have no matching toolCall (defensive — the SSE protocol
+ *  guarantees ordering, but localStorage-restored or race-condition
+ *  messages might only have results). */
+function buildToolParts(msg: ChatMessage): ToolPart[] {
+  const parts: ToolPart[] = [];
+  const seen = new Set<string>();
 
-  // Collect products per tool call, keeping order
-  const perCall: Array<{
-    name: string;
-    products: Record<string, unknown>[];
-    result: Record<string, unknown>;
-    toolCallId: string;
-  }> = [];
+  // Primary path: iterate toolCalls, join with matching results
+  for (const tc of msg.toolCalls ?? []) {
+    seen.add(tc.id);
+    const tr = (msg.toolResults ?? []).find((r) => r.id === tc.id);
+    parts.push({
+      toolCallId: tc.id,
+      toolName: tc.name,
+      args: tc.input,
+      result: tr?.result,
+      isError: tr?.is_error,
+    });
+  }
 
-  for (const tr of msg.toolResults) {
+  // Fallback: pick up any tool results that weren't matched by a toolCall
+  for (const tr of msg.toolResults ?? []) {
+    if (seen.has(tr.id)) continue;
+    parts.push({
+      toolCallId: tr.id,
+      toolName: tr.name,
+      args: {},
+      result: tr.result,
+      isError: tr.is_error,
+    });
+  }
+
+  return parts;
+}
+
+/** Extract pagination metadata from the primary search tool result. */
+function extractSearchMeta(msg: ChatMessage): SearchMeta | undefined {
+  if (!msg.toolResults) return undefined;
+
+  // Find the last search/browse tool result with a total count
+  for (let i = (msg.toolResults ?? []).length - 1; i >= 0; i--) {
+    const tr = msg.toolResults[i];
     if (!PRODUCT_TOOLS.has(tr.name) || tr.is_error) continue;
     const result = tr.result as Record<string, unknown> | null;
     if (!result) continue;
-
-    const callProducts: Record<string, unknown>[] = [];
-    if (Array.isArray((result as any).products)) {
-      callProducts.push(...((result as any).products as Record<string, unknown>[]));
-    } else if ((result as any).productId) {
-      callProducts.push(result);
-    }
-
-    // Filter products with valid prices
-    const valid = callProducts.filter(
-      (p) => typeof (p as any).sellingPrice === "number" && (p as any).sellingPrice > 0,
-    );
-
-    if (valid.length > 0) {
-      perCall.push({ name: tr.name, products: valid, result, toolCallId: tr.id });
-    }
-  }
-
-  if (perCall.length === 0) return { products: [] };
-
-  // Build search metadata from the primary tool result + its call input
-  function buildMeta(call: typeof perCall[0]): SearchMeta | undefined {
-    const r = call.result;
-    const total = typeof r.total === "number" ? r.total : 0;
-    if (total <= 0) return undefined;
+    const total = typeof result.total === "number" ? result.total : 0;
+    if (total <= 0) continue;
 
     // Find the matching tool call to get search params
-    const tc = (msg.toolCalls ?? []).find((t) => t.id === call.toolCallId);
+    const tc = (msg.toolCalls ?? []).find((t) => t.id === tr.id);
     const input = tc?.input ?? {};
+
+    // Don't show pagination in multi-search (recipe) mode
+    const searchCount = (msg.toolResults ?? []).filter(
+      (r) => PRODUCT_TOOLS.has(r.name) && !r.is_error && r.result,
+    ).length;
+    if (searchCount > 1) return undefined;
 
     return {
       total,
-      start: typeof r.start === "number" ? r.start : 0,
-      end: typeof r.end === "number" ? r.end : 19,
+      start: typeof result.start === "number" ? result.start : 0,
+      end: typeof result.end === "number" ? result.end : 19,
       searchParams: {
         query: typeof input.query === "string" ? input.query : undefined,
         category: typeof input.category === "string" ? input.category : undefined,
@@ -221,40 +240,7 @@ function extractProductsAndMeta(msg: ChatMessage): {
     };
   }
 
-  // For recipe/multi-component plans (multiple search_products calls),
-  // show all results. For single browse/retry scenarios, show the last
-  // successful search to avoid mixing failed-attempt results with the
-  // correct ones.
-  if (perCall.length <= 1) {
-    return {
-      products: perCall[0]?.products ?? [],
-      searchMeta: buildMeta(perCall[0]),
-    };
-  }
-
-  // Heuristic: if all calls are search_products (recipe mode), show all.
-  // If there's a mix of browse + search (retry), show only the last call.
-  const allSearch = perCall.every((c) => c.name === "search_products");
-  if (allSearch) {
-    // Deduplicate by productId across all calls
-    const seen = new Set<string>();
-    const all: Record<string, unknown>[] = [];
-    for (const call of perCall) {
-      for (const p of call.products) {
-        const id = String((p as any).productId);
-        if (!seen.has(id)) {
-          seen.add(id);
-          all.push(p);
-        }
-      }
-    }
-    // Recipe mode: don't show pagination (multiple searches combined)
-    return { products: all };
-  }
-
-  // Mixed calls — show only the last successful one (likely the retry)
-  const last = perCall[perCall.length - 1];
-  return { products: last.products, searchMeta: buildMeta(last) };
+  return undefined;
 }
 
 function extractFollowups(

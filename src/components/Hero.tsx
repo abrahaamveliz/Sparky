@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useLocale } from "@/lib/i18n";
 import { PRODUCT_NAME } from "@/lib/product-name";
 
-const HERO_VIDEO_SRC =
-  "https://player.vimeo.com/video/1127261132?h=6a89aae96a&badge=0&autopause=0&player_id=0&app_id=58479";
+const HERO_VIDEO_SRC = "/sparky.mp4";
 
-// If the Vimeo iframe never fires `load` within this window, treat it as a
+// If the video never fires `loadeddata` within this window, treat it as a
 // network failure and show a static fallback. Real loads on a slow phone
 // are usually well under 4s.
 const VIDEO_LOAD_TIMEOUT_MS = 6000;
@@ -43,14 +42,20 @@ export function Hero() {
     <div className="hero">
       <div className={`hero-video hero-video--${videoState}`}>
         {videoState !== "failed" && (
-          <iframe
+          <video
             src={HERO_VIDEO_SRC}
-            allow="autoplay; fullscreen; picture-in-picture; clipboard-write"
-            allowFullScreen
+            autoPlay
+            muted
+            loop
+            playsInline
             title={t("hero.video.title", { name })}
-            onLoad={() => {
+            onLoadedData={() => {
               if (timerRef.current) clearTimeout(timerRef.current);
               setVideoState("ready");
+            }}
+            onError={() => {
+              if (timerRef.current) clearTimeout(timerRef.current);
+              setVideoState("failed");
             }}
           />
         )}

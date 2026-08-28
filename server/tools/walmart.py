@@ -115,25 +115,125 @@ def _trim_category(node: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# ── subcategory coherence filter ───────────────────────────────────────
+# ── facets-based pre-scoping ───────────────────────────────────────────
 #
-# VTEX full-text search matches substrings across the entire product name,
-# so a query like "aceite vegetal" returns both cooking oil AND canned tuna
-# that mentions "aceite vegetal" in its description ("Atún en aceite
-# vegetal"). Similarly, "papa" matches "papaya".
+# When a text query is issued WITHOUT a category, VTEX full-text search
+# matches substrings across the entire product name.  With price-sorting
+# (OrderByPriceASC), this means the cheapest irrelevant products fill the
+# result window before any relevant ones appear.
 #
-# The fix: use VTEX's own category taxonomy as the source of truth.  Every
-# product comes with a `categories` field containing full paths like
-# "/Abarrotes/Aceites de cocina/Aceite de Semillas y Vegetal/".  Products
-# that are genuinely what the user searched for cluster in the same leaf
-# subcategory.  Products that merely mention the search term in their name
-# live in a different subcategory (tuna → "Atún y Pescado", papaya →
-# "Papayas y tropicales").
+# The fix: call the VTEX facets API first to learn category distribution,
+# then scope the actual search to the dominant subcategory.  This
+# eliminates cross-category noise at the API level.
+#
+# Example: "aceite vegetal" unscoped → tuna (Q10.25) beats oil (Q10.65).
+# Facets show Aceites de cocina (58) >> Enlatados (8).  Scoped search
+# returns pure cooking oil.
+
+async def _get_dominant_subcategory(
+    query: str,
+) -> tuple[str, ...] | None:
+    """Use VTEX facets to find the dominant subcategory for a query.
+
+    Tries two depths:
+    1. Mid-level (depth 1): e.g. "Aceites de cocina" under "Abarrotes".
+    2. Leaf-level (depth 2): e.g. "Arroz" under "Arroz, Frijol y Semillas"
+       under "Abarrotes".  Used when the mid-level dominant is a composite
+       category that groups unrelated products (arroz + frijol + semillas).
+
+    Returns a tuple of URL slugs from the facets Link field, suitable for
+    constructing a category-scoped search path:
+      (parent_slug, child_slug) for mid-level scoping
+      (parent_slug, child_slug, grandchild_slug) for leaf-level scoping
+    Returns None when no subcategory clearly dominates.
+    """
+    try:
+        resp = await _get(f"{FACETS_PATH}/{query}", [("map", "ft")])
+        data = resp.json() or {}
+    except Exception:
+        return None
+
+    trees = data.get("CategoriesTrees") or []
+    if not trees:
+        return None
+
+    # Collect all mid-level children across all top-level trees, along
+    # with their grandchildren (for leaf-level refinement).
+    _Child = tuple[str, str, int, list[dict[str, Any]]]  # (parent_slug, child_slug, count, grandchildren_raw)
+    candidates: list[_Child] = []
+    total_across_children = 0
+
+    for tree in trees:
+        children = tree.get("Children") or []
+        for child in children:
+            count = child.get("Quantity") or 0
+            link = child.get("Link") or ""
+            if count < 1 or not link:
+                continue
+            # Parse the Link to extract parent and child slugs.
+            # Link format: "/Parent-Slug/Child-Slug/query?map=c,c,ft"
+            link_path = link.split("?")[0].strip("/")
+            segments = [s for s in link_path.split("/") if s]
+            if len(segments) < 2:
+                continue
+            parent_slug = segments[0]
+            child_slug = segments[1]
+            grandchildren = child.get("Children") or []
+            candidates.append((parent_slug, child_slug, count, grandchildren))
+            total_across_children += count
+
+    if not candidates or total_across_children < 3:
+        return None
+
+    # Find the child with the highest count
+    candidates.sort(key=lambda c: c[2], reverse=True)
+    best_parent, best_child, best_count, best_grandchildren = candidates[0]
+
+    # Require the dominant to hold ≥ 50% of all mid-level results
+    if best_count / total_across_children < 0.5:
+        return None
+
+    # Try leaf-level refinement: if the dominant mid-level child has
+    # grandchildren, check if one grandchild clearly dominates within it.
+    # This catches cases like "Arroz, Frijol y Semillas" where the mid-level
+    # groups unrelated products but a leaf subcategory ("Arroz") is the
+    # clear winner.
+    if best_grandchildren and len(best_grandchildren) >= 2:
+        gc_candidates: list[tuple[str, int]] = []
+        gc_total = 0
+        for gc in best_grandchildren:
+            gc_count = gc.get("Quantity") or 0
+            gc_link = gc.get("Link") or ""
+            if gc_count < 1 or not gc_link:
+                continue
+            gc_path = gc_link.split("?")[0].strip("/")
+            gc_segments = [s for s in gc_path.split("/") if s]
+            if len(gc_segments) < 3:
+                continue
+            gc_slug = gc_segments[2]
+            gc_candidates.append((gc_slug, gc_count))
+            gc_total += gc_count
+
+        if gc_candidates and gc_total >= 3:
+            gc_candidates.sort(key=lambda c: c[1], reverse=True)
+            gc_best_slug, gc_best_count = gc_candidates[0]
+            # Require ≥ 60% dominance at the leaf level (stricter than
+            # mid-level because we're adding an extra path segment)
+            if gc_best_count / gc_total >= 0.6:
+                return (best_parent, best_child, gc_best_slug)
+
+    return (best_parent, best_child)
+
+
+# ── subcategory coherence filter (post-hoc safety net) ─────────────────
+#
+# Even after facets pre-scoping, some noise may remain.  This post-hoc
+# filter uses the products' own category taxonomy to drop outliers.
 #
 # Algorithm:
-# 1. Extract the leaf subcategory (deepest path segment) for each product
-# 2. Find the dominant subcategory (most common leaf, ≥ 40% of results)
-# 3. Drop products whose leaf doesn't match the dominant
+# 1. Extract the mid-level subcategory (depth 2) for each product
+# 2. Find the dominant subcategory (most common, ≥ 40% of results)
+# 3. Drop products whose mid-level doesn't match the dominant
 # 4. Fall back to unfiltered if no clear dominant or if filtering would
 #    remove everything
 
@@ -216,9 +316,57 @@ async def do_product_search(
     end: int = 19,
     order_by: str = "OrderByScoreDESC",
 ) -> dict[str, Any]:
-    """Run a VTEX catalog search and return transformed products."""
+    """Run a VTEX catalog search and return transformed products.
+
+    When a text query is provided without a category and this is the first
+    page (start == 0), the function calls the VTEX facets API to identify
+    the dominant subcategory and scopes the search to it.  This eliminates
+    cross-category noise at the API level — e.g. tuna from an "aceite
+    vegetal" search — before results are returned.
+    """
+    subcategory_scoped = False
+
+    # Phase 1: facets-based pre-scoping.  Only when:
+    #   - text query is present
+    #   - model didn't already scope with a category
+    #   - first page (pagination inherits the parent's scoping)
+    if query and not category and start == 0:
+        dominant = await _get_dominant_subcategory(query)
+        if dominant:
+            # dominant is either (parent, child) or (parent, child, grandchild)
+            slug_path = "/".join(dominant)
+            map_value = ",".join(["c"] * len(dominant))
+            path = f"{SEARCH_PATH}/{slug_path}"
+            params: list[tuple[str, Any]] = [
+                ("_from", start),
+                ("_to", end),
+                ("O", order_by),
+                ("ft", query),
+                ("map", map_value),
+            ]
+            for clause in _build_fq(brand_id, price_min, price_max):
+                params.append(("fq", clause))
+
+            resp = await _get(path, params)
+            total = _total_from_resources(resp.headers.get("resources"))
+            raw_products = resp.json() or []
+
+            # Only use scoped results if they returned something.
+            # Otherwise fall through to the unscoped search.
+            if raw_products:
+                products = [_transform(p) for p in raw_products]
+                subcategory_scoped = True
+                return {
+                    "total": total,
+                    "start": start,
+                    "end": start + len(products) - 1 if products else start,
+                    "products": products,
+                    "subcategory_scoped": True,
+                }
+
+    # Phase 2: standard search (unscoped or category-scoped by the model)
     path = f"{SEARCH_PATH}/{category}" if category else SEARCH_PATH
-    params: list[tuple[str, Any]] = [
+    params = [
         ("_from", start),
         ("_to", end),
         ("O", order_by),
@@ -235,9 +383,7 @@ async def do_product_search(
     raw_products = resp.json() or []
     products = [_transform(p) for p in raw_products]
 
-    # Apply subcategory coherence filter when a text query was used.
-    # This removes cross-category noise (e.g. tuna from an oil search)
-    # using the catalog's own taxonomy rather than name heuristics.
+    # Apply post-hoc subcategory coherence filter as a safety net.
     if query:
         products = _filter_by_subcategory(products)
 

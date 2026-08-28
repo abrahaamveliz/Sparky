@@ -622,9 +622,9 @@ function detectInitial(): Locale {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored === "es" || stored === "en") return stored;
   } catch {}
-  // Default to Spanish for first-time visitors — this is a Walmart
-  // Guatemala demo. English-speaking users flip via the locale switcher;
-  // the choice persists in localStorage.
+  // Default to Spanish — product data comes from VTEX in Spanish and
+  // translating adds latency.  English-speaking visitors can flip via
+  // the locale switcher; the choice persists in localStorage.
   return "es";
 }
 

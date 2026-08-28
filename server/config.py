@@ -19,3 +19,22 @@ WALMART_BASE: str = "https://www.walmart.com.gt"
 # Server
 HOST: str = os.environ.get("HOST", "0.0.0.0")
 PORT: int = int(os.environ.get("PORT", "8000"))
+
+# --- OWASP Security ---
+
+# Anti-replay challenge token
+CHALLENGE_SECRET: str = os.environ.get("CHALLENGE_SECRET", "")
+
+# Cloudflare Turnstile
+TURNSTILE_SITE_KEY: str = os.environ.get("TURNSTILE_SITE_KEY", "")
+TURNSTILE_SECRET_KEY: str = os.environ.get("TURNSTILE_SECRET_KEY", "")
+
+# Upstash Redis (rate limiting & nonce store)
+UPSTASH_REDIS_REST_URL: str = os.environ.get("UPSTASH_REDIS_REST_URL", "")
+UPSTASH_REDIS_REST_TOKEN: str = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
+
+# CORS
+ALLOWED_ORIGINS: list[str] = [
+    "https://sparky.abrahaamveliz.com",
+    "https://dev-5180.abrahaamveliz.com",
+]
