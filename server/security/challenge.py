@@ -23,7 +23,7 @@ from server.config import CHALLENGE_SECRET, UPSTASH_REDIS_REST_URL
 logger = logging.getLogger(__name__)
 
 _ALGORITHM = "HS256"
-_CHALLENGE_TTL = 30  # seconds
+_CHALLENGE_TTL = 300  # 5 minutes — matches Turnstile token validity
 
 # In-memory fallback nonce store: nonce → expiry timestamp
 _nonce_store: dict[str, float] = {}
@@ -102,16 +102,15 @@ def _validate_challenge(token: str) -> dict:
     if not nonce:
         raise HTTPException(401, "Malformed challenge token")
 
-    # Consume nonce (one-time use)
+    # Verify nonce exists (reusable within its TTL window)
     redis = _redis_client()
     if redis:
-        deleted = redis.delete(f"nonce:{nonce}")
-        if not deleted:
-            raise HTTPException(401, "Challenge already used or expired")
+        exists = redis.get(f"nonce:{nonce}")
+        if not exists:
+            raise HTTPException(401, "Challenge expired")
     else:
-        if nonce not in _nonce_store:
-            raise HTTPException(401, "Challenge already used or expired")
-        del _nonce_store[nonce]
+        if nonce not in _nonce_store or _nonce_store[nonce] < time.time():
+            raise HTTPException(401, "Challenge expired")
 
     return payload
 
