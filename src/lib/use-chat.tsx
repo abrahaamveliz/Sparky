@@ -243,7 +243,7 @@ function condenseToolResult(tr: ToolResult): string {
   }
 }
 
-/** Build the message payload the Python backend expects (OpenAI format). */
+/** Build the message payload the Python backend expects. */
 function toApiMessages(messages: ChatMessage[]): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
 
@@ -251,32 +251,32 @@ function toApiMessages(messages: ChatMessage[]): Record<string, unknown>[] {
     if (msg.role === "user") {
       out.push({ role: "user", content: msg.content });
     } else {
-      // Assistant message: content is a plain string, tool_calls is an array
-      const assistantMsg: Record<string, unknown> = { role: "assistant" };
+      const content: Record<string, unknown>[] = [];
       if (msg.content) {
-        assistantMsg.content = msg.content;
+        content.push({ type: "text", text: msg.content });
       }
-      if (msg.toolCalls && msg.toolCalls.length > 0) {
-        assistantMsg.tool_calls = msg.toolCalls.map((tc) => ({
-          id: tc.id,
-          type: "function",
-          function: {
+      if (msg.toolCalls) {
+        for (const tc of msg.toolCalls) {
+          content.push({
+            type: "tool_use",
+            id: tc.id,
             name: tc.name,
-            arguments: JSON.stringify(tc.input),
-          },
-        }));
-      }
-      out.push(assistantMsg);
-
-      // Each tool result is a separate "tool" message
-      if (msg.toolResults && msg.toolResults.length > 0) {
-        for (const tr of msg.toolResults) {
-          out.push({
-            role: "tool",
-            tool_call_id: tr.id,
-            content: condenseToolResult(tr),
+            input: tc.input,
           });
         }
+      }
+      out.push({ role: "assistant", content });
+
+      if (msg.toolResults && msg.toolResults.length > 0) {
+        out.push({
+          role: "user",
+          content: msg.toolResults.map((tr) => ({
+            type: "tool_result",
+            tool_use_id: tr.id,
+            content: condenseToolResult(tr),
+            is_error: tr.is_error,
+          })),
+        });
       }
     }
   }
