@@ -35,6 +35,7 @@ UPSTASH_REDIS_REST_TOKEN: str = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
 
 # CORS
 ALLOWED_ORIGINS: list[str] = [
+    "https://sparky.visualkit.live",
     "https://sparky.abrahaamveliz.com",
     "https://dev-5180.abrahaamveliz.com",
 ]
