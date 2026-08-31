@@ -23,16 +23,26 @@ const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as
   | string
   | undefined;
 
+// ── Challenge pre-loading ───────────────────────────────────────
+// On page load we run the full pipeline (Turnstile → /api/challenge)
+// once, cache the resulting challenge JWT, and reuse it for every
+// message within its 5-minute window. A timer regenerates the JWT
+// 30 s before it expires so there is always a warm token ready.
+
+let _challengeJwt: string | undefined;
+let _challengeAge = 0;
+let _refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let _pendingChallenge: Promise<string | undefined> | null = null;
+
+const CHALLENGE_REFRESH_MS = 4.5 * 60 * 1000; // refresh 30 s before expiry
+const CHALLENGE_TTL_MS = 5 * 60 * 1000;       // JWT validity window
+
 /**
  * Render an invisible Turnstile widget and resolve with the response
  * token. Falls back to undefined when Turnstile is not configured or
  * the script hasn't loaded yet.
- *
- * The container must be in the DOM and not display:none — invisible
- * Turnstile still needs a live element to execute its challenge. We
- * position it off-screen so it doesn't affect layout.
  */
-function getTurnstileToken(): Promise<string | undefined> {
+function renderTurnstileToken(): Promise<string | undefined> {
   const turnstile = (window as any).turnstile;
   if (!turnstile || !TURNSTILE_SITE_KEY) return Promise.resolve(undefined);
 
@@ -41,7 +51,6 @@ function getTurnstileToken(): Promise<string | undefined> {
     const done = (token: string | undefined) => {
       if (settled) return;
       settled = true;
-      // Clean up the container after resolving
       setTimeout(() => {
         turnstile.remove(widgetId);
         container.remove();
@@ -49,8 +58,6 @@ function getTurnstileToken(): Promise<string | undefined> {
       resolve(token);
     };
 
-    // Container must be visible in the DOM for Turnstile to run,
-    // but positioned off-screen so the user sees nothing.
     const container = document.createElement("div");
     container.style.position = "fixed";
     container.style.left = "-9999px";
@@ -65,9 +72,82 @@ function getTurnstileToken(): Promise<string | undefined> {
       "expired-callback": () => done(undefined),
     });
 
-    // Safety timeout — if Turnstile hangs, don't block the chat forever
     setTimeout(() => done(undefined), 10_000);
   });
+}
+
+/**
+ * Run the full pipeline: Turnstile token → /api/challenge → JWT.
+ * Caches the JWT and schedules the next refresh.
+ */
+function warmChallenge(): Promise<string | undefined> {
+  if (_refreshTimer) clearTimeout(_refreshTimer);
+
+  const promise = renderTurnstileToken()
+    .then(async (turnstileToken) => {
+      try {
+        const res = await fetch("/api/challenge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ turnstile: turnstileToken }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.challenge as string | undefined;
+        }
+      } catch {
+        // If challenge endpoint fails, proceed without — server decides
+      }
+      return undefined;
+    })
+    .then((jwt) => {
+      _challengeJwt = jwt;
+      _challengeAge = Date.now();
+      _pendingChallenge = null;
+      // Schedule auto-refresh before expiry
+      _refreshTimer = setTimeout(() => {
+        _pendingChallenge = warmChallenge();
+      }, CHALLENGE_REFRESH_MS);
+      return jwt;
+    });
+
+  _pendingChallenge = promise;
+  return promise;
+}
+
+/**
+ * Return the cached challenge JWT, reused for every message within
+ * its 5-minute window. Only the background timer triggers a new
+ * Turnstile + /api/challenge round-trip.
+ */
+async function getChallengeToken(): Promise<string | undefined> {
+  if (_pendingChallenge) await _pendingChallenge;
+
+  const age = Date.now() - _challengeAge;
+  if (!_challengeJwt || age >= CHALLENGE_TTL_MS) {
+    await warmChallenge();
+  }
+
+  return _challengeJwt;
+}
+
+// Kick off preloading as soon as the Turnstile script is available.
+// _pendingChallenge is set synchronously so that a message sent before
+// the script loads will await this promise rather than skipping.
+if (TURNSTILE_SITE_KEY) {
+  const waitForTurnstile = (): Promise<void> => {
+    if ((window as any).turnstile) return Promise.resolve();
+    return new Promise((resolve) => {
+      const poll = setInterval(() => {
+        if ((window as any).turnstile) {
+          clearInterval(poll);
+          resolve();
+        }
+      }, 100);
+      setTimeout(() => { clearInterval(poll); resolve(); }, 30_000);
+    });
+  };
+  _pendingChallenge = waitForTurnstile().then(() => warmChallenge());
 }
 
 export type ToolCall = {
@@ -107,6 +187,62 @@ function nextId() {
   return `msg-${++msgIdCounter}-${Date.now()}`;
 }
 
+// Tools whose results contain bulky product data that the model only
+// needs in condensed form (name, brand, price, productId).
+const _PRODUCT_TOOLS = new Set([
+  "search_products",
+  "browse_category",
+  "get_product_by_slug",
+  "get_product_by_id",
+]);
+
+/**
+ * Condense a product-tool result for the round-trip payload.
+ *
+ * Only the first 10 products are kept (name, brand, price, productId) —
+ * enough for the model to reference what was shown. The full count is
+ * preserved so the model knows the real result size. This mirrors the
+ * server's _condense_for_model and additionally caps the list so even
+ * large category browses stay under a few hundred bytes.
+ */
+const MAX_PRODUCTS_FOR_MODEL = 10;
+
+function condenseToolResult(tr: ToolResult): string {
+  if (tr.is_error || !_PRODUCT_TOOLS.has(tr.name)) {
+    return typeof tr.result === "string"
+      ? tr.result
+      : JSON.stringify(tr.result);
+  }
+
+  try {
+    const data =
+      typeof tr.result === "string" ? JSON.parse(tr.result) : tr.result;
+    if (!data || typeof data !== "object") throw 0;
+
+    const products = (data as Record<string, unknown>).products;
+    if (!Array.isArray(products)) throw 0;
+
+    const condensed = products
+      .slice(0, MAX_PRODUCTS_FOR_MODEL)
+      .map((p: Record<string, unknown>) => ({
+        name: p.name ?? "",
+        brand: p.brand ?? "",
+        sellingPrice: p.sellingPrice,
+        listPrice: p.listPrice,
+        productId: p.productId ?? "",
+      }));
+
+    return JSON.stringify({
+      total: (data as Record<string, unknown>).total ?? products.length,
+      products: condensed,
+    });
+  } catch {
+    return typeof tr.result === "string"
+      ? tr.result
+      : JSON.stringify(tr.result);
+  }
+}
+
 /** Build the message payload the Python backend expects. */
 function toApiMessages(messages: ChatMessage[]): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
@@ -137,10 +273,7 @@ function toApiMessages(messages: ChatMessage[]): Record<string, unknown>[] {
           content: msg.toolResults.map((tr) => ({
             type: "tool_result",
             tool_use_id: tr.id,
-            content:
-              typeof tr.result === "string"
-                ? tr.result
-                : JSON.stringify(tr.result),
+            content: condenseToolResult(tr),
             is_error: tr.is_error,
           })),
         });
@@ -312,26 +445,9 @@ export function ChatProvider({
       setMessages((prev) => [...prev, assistantMsg]);
 
       try {
-        // Step 1: Acquire a one-time challenge token (anti-replay)
-        let challengeToken: string | undefined;
-        try {
-          const turnstileToken = await getTurnstileToken();
-          const challengeRes = await fetch("/api/challenge", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ turnstile: turnstileToken }),
-            signal: controller.signal,
-          });
-          if (challengeRes.ok) {
-            const challengeData = await challengeRes.json();
-            challengeToken = challengeData.challenge;
-          }
-        } catch {
-          // If challenge fails, try the chat request anyway — the server
-          // will reject it if challenge validation is enforced.
-        }
+        // Use the preloaded challenge JWT (reusable within its 5-min window)
+        const challengeToken = await getChallengeToken();
 
-        // Step 2: Send chat request with challenge header
         const apiMessages = toApiMessages(allMessages);
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
