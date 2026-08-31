@@ -1,4 +1,4 @@
-"""Tool registry — maps tool names to callables and generates Anthropic
+"""Tool registry — maps tool names to callables and generates OpenAI
 tool schemas automatically."""
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ ToolFn = Callable[..., Awaitable[Any]]
 
 class ToolRegistry:
     """Collects tool functions and produces the ``tools`` list that the
-    Anthropic API expects."""
+    OpenAI chat completions API expects."""
 
     def __init__(self) -> None:
         self._tools: dict[str, ToolFn] = {}
@@ -48,8 +48,18 @@ class ToolRegistry:
 
     @property
     def schemas(self) -> list[dict[str, Any]]:
-        """Anthropic-format ``tools`` list."""
-        return list(self._schemas.values())
+        """OpenAI-format ``tools`` list."""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": s["name"],
+                    "description": s["description"],
+                    "parameters": s["input_schema"],
+                },
+            }
+            for s in self._schemas.values()
+        ]
 
     async def call(self, name: str, args: dict[str, Any]) -> str:
         """Execute a tool and return the result as a JSON string."""

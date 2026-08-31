@@ -181,7 +181,7 @@ async def _agent_loop(
 
     Text tokens stream as they arrive. Tool calls are collected from the
     stream and emitted after the full response, then executed. The loop
-    repeats until end_turn or step limit.
+    repeats until stop or step limit.
     """
 
     steps = 0
@@ -189,94 +189,100 @@ async def _agent_loop(
         steps += 1
 
         try:
-            # Use streaming to send text tokens in real-time
             text_buffer = ""
-            tool_uses: list[dict[str, Any]] = []
-            current_tool: dict[str, Any] | None = None
-            current_tool_json = ""
-            stop_reason = None
+            # Accumulate tool calls by index: {index: {id, name, arguments}}
+            tool_calls_acc: dict[int, dict[str, Any]] = {}
+            finish_reason = None
 
-            with agent.client.messages.stream(
-                model=agent.model,
-                max_tokens=8192,
+            stream = agent.stream(
                 messages=messages,
                 system=system,
                 tools=tools_schemas,
-            ) as stream:
-                for event in stream:
-                    etype = event.type
+                max_tokens=8192,
+            )
 
-                    if etype == "content_block_start":
-                        block = event.content_block
-                        if block.type == "tool_use":
-                            current_tool = {
-                                "id": block.id,
-                                "name": block.name,
-                                "input": {},
+            for chunk in stream:
+                choice = chunk.choices[0] if chunk.choices else None
+                if not choice:
+                    continue
+
+                delta = choice.delta
+
+                # Text tokens
+                if delta.content:
+                    text_buffer += delta.content
+                    clean = _strip_tool_leaks(delta.content)
+                    if clean:
+                        yield _sse("text", {"content": clean})
+
+                # Tool call deltas
+                if delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in tool_calls_acc:
+                            tool_calls_acc[idx] = {
+                                "id": tc_delta.id or "",
+                                "name": "",
+                                "arguments": "",
                             }
-                            current_tool_json = ""
+                        acc = tool_calls_acc[idx]
+                        if tc_delta.id:
+                            acc["id"] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                acc["name"] = tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                acc["arguments"] += tc_delta.function.arguments
 
-                    elif etype == "content_block_delta":
-                        delta = event.delta
-                        if delta.type == "text_delta" and delta.text:
-                            text_buffer += delta.text
-                            # Stream text to client immediately
-                            clean = _strip_tool_leaks(delta.text)
-                            if clean:
-                                yield _sse("text", {"content": clean})
-
-                        elif delta.type == "input_json_delta" and delta.partial_json:
-                            current_tool_json += delta.partial_json
-
-                    elif etype == "content_block_stop":
-                        if current_tool is not None:
-                            # Parse the accumulated JSON for this tool call
-                            try:
-                                current_tool["input"] = json.loads(current_tool_json) if current_tool_json else {}
-                            except json.JSONDecodeError:
-                                current_tool["input"] = {}
-
-                            tool_uses.append(current_tool)
-                            yield _sse("tool_call", {
-                                "id": current_tool["id"],
-                                "name": current_tool["name"],
-                                "input": current_tool["input"],
-                            })
-                            current_tool = None
-                            current_tool_json = ""
-
-                    elif etype == "message_delta":
-                        if hasattr(event, 'delta') and hasattr(event.delta, 'stop_reason'):
-                            stop_reason = event.delta.stop_reason
-
-                response = stream.get_final_message()
-                if stop_reason is None:
-                    stop_reason = response.stop_reason
+                if choice.finish_reason:
+                    finish_reason = choice.finish_reason
 
         except Exception as e:
             yield _sse("error", {"message": str(e)})
             return
 
+        # Parse accumulated tool calls
+        tool_uses: list[dict[str, Any]] = []
+        for idx in sorted(tool_calls_acc.keys()):
+            acc = tool_calls_acc[idx]
+            try:
+                parsed_input = json.loads(acc["arguments"]) if acc["arguments"] else {}
+            except json.JSONDecodeError:
+                parsed_input = {}
+            tool_uses.append({
+                "id": acc["id"],
+                "name": acc["name"],
+                "input": parsed_input,
+            })
+            yield _sse("tool_call", {
+                "id": acc["id"],
+                "name": acc["name"],
+                "input": parsed_input,
+            })
+
         # If no tool calls, we're done
         if not tool_uses:
             break
 
-        # Add assistant message to history
-        serialized_content = []
-        for block in response.content:
-            if block.type == "text":
-                serialized_content.append({"type": "text", "text": block.text})
-            elif block.type == "tool_use":
-                serialized_content.append({
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                })
-        messages.append({"role": "assistant", "content": serialized_content})
+        # Add assistant message to history (OpenAI format)
+        assistant_msg: dict[str, Any] = {"role": "assistant"}
+        if text_buffer:
+            assistant_msg["content"] = text_buffer
+        if tool_uses:
+            assistant_msg["tool_calls"] = [
+                {
+                    "id": t["id"],
+                    "type": "function",
+                    "function": {
+                        "name": t["name"],
+                        "arguments": json.dumps(t["input"], ensure_ascii=False),
+                    },
+                }
+                for t in tool_uses
+            ]
+        messages.append(assistant_msg)
 
-        # Execute tools and build result message
-        tool_results_for_model: list[dict[str, Any]] = []
+        # Execute tools and build result messages
         for tool_use in tool_uses:
             result_str = await registry.call(tool_use["name"], tool_use["input"])
             is_error = False
@@ -301,22 +307,17 @@ async def _agent_loop(
                 tool_use["name"], result_str, is_error,
             )
 
-            tool_results_for_model.append({
-                "type": "tool_result",
-                "tool_use_id": tool_use["id"],
+            # OpenAI format: one "tool" message per result
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_use["id"],
                 "content": model_content,
-                "is_error": is_error,
             })
 
-        messages.append({"role": "user", "content": tool_results_for_model})
-
         # Stop the loop when the turn is logically complete:
-        # - model signaled end_turn
+        # - model signaled stop
         # - propose_followups was called AND the model already wrote prose
-        #   (if it called propose_followups without text, let the loop
-        #   continue so the model can write its summary after seeing
-        #   tool results — breaking early leaves the user with no prose)
-        if stop_reason == "end_turn":
+        if finish_reason == "stop":
             break
         has_followups = any(t["name"] == "propose_followups" for t in tool_uses)
         has_prose = bool(text_buffer.strip())
