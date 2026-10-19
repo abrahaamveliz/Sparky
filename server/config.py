@@ -38,4 +38,5 @@ ALLOWED_ORIGINS: list[str] = [
     "https://sparky.visualkit.live",
     "https://sparky.abrahaamveliz.com",
     "https://dev-5180.abrahaamveliz.com",
+    "https://sparky-pxdw.onrender.com",
 ]
