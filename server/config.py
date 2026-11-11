@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dotenv import load_dotenv
 
@@ -12,6 +13,19 @@ load_dotenv()  # .env fallback, no override
 LLM_BASE_URL: str = os.environ.get("LLM_BASE_URL", "")
 LLM_API_KEY: str = os.environ.get("LLM_API_KEY", "")
 MODEL_ID: str = os.environ.get("MODEL_ID", "claude-sonnet-4-5")
+
+# Optional extra HTTP headers sent to the inference endpoint, as a JSON
+# object. Some Anthropic-compatible proxies need routing headers, e.g.
+# LLM_EXTRA_HEADERS={"x-opencode-session": "<uuid>"}
+LLM_EXTRA_HEADERS: dict[str, str] = {}
+_extra_headers_raw = os.environ.get("LLM_EXTRA_HEADERS", "").strip()
+if _extra_headers_raw:
+    try:
+        _parsed_headers = json.loads(_extra_headers_raw)
+        if isinstance(_parsed_headers, dict):
+            LLM_EXTRA_HEADERS = {str(k): str(v) for k, v in _parsed_headers.items()}
+    except json.JSONDecodeError:
+        pass
 
 # VTEX / Walmart Guatemala
 WALMART_BASE: str = "https://www.walmart.com.gt"

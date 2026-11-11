@@ -7,7 +7,7 @@ from typing import Any, Generator
 from anthropic import Anthropic
 from anthropic.types import Message, RawMessageStreamEvent
 
-from server.config import LLM_BASE_URL, LLM_API_KEY, MODEL_ID
+from server.config import LLM_BASE_URL, LLM_API_KEY, MODEL_ID, LLM_EXTRA_HEADERS
 
 
 class Agent:
@@ -15,8 +15,9 @@ class Agent:
 
     def __init__(self, model: str | None = None):
         self.client = Anthropic(
-            base_url=LLM_BASE_URL,
-            api_key=LLM_API_KEY,
+            base_url=LLM_BASE_URL or None,
+            api_key=LLM_API_KEY or None,
+            default_headers=LLM_EXTRA_HEADERS or None,
         )
         self.model = model or MODEL_ID
 

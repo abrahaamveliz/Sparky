@@ -10,7 +10,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from server.config import HOST, PORT, ALLOWED_ORIGINS
+from server.config import (
+    HOST,
+    PORT,
+    ALLOWED_ORIGINS,
+    LLM_BASE_URL,
+    LLM_API_KEY,
+    MODEL_ID,
+)
 from server.routes.chat import router as chat_router
 from server.routes.products import router as products_router
 from server.routes.challenge import router as challenge_router
@@ -42,6 +49,17 @@ async def security_headers(request: Request, call_next):
 app.include_router(challenge_router)
 app.include_router(chat_router)
 app.include_router(products_router)
+
+
+@app.get("/health")
+async def health():
+    """Liveness + non-secret LLM config presence check."""
+    return {
+        "ok": True,
+        "llm_base_url_set": bool(LLM_BASE_URL),
+        "llm_api_key_set": bool(LLM_API_KEY),
+        "model": MODEL_ID,
+    }
 
 # Serve built frontend (if dist/ exists)
 DIST = Path(__file__).parent.parent / "dist"
