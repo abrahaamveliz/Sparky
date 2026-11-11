@@ -2,7 +2,7 @@
 
 Returns a single-use, short-lived JWT that the frontend must send
 as the X-Challenge header on subsequent /api/chat requests.
-Optionally gated by Cloudflare Turnstile when configured.
+Cloudflare Turnstile is disabled, so a token is always issued.
 """
 
 from __future__ import annotations

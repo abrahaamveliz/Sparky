@@ -18,16 +18,12 @@ import {
   type ReactNode,
 } from "react";
 
-// Turnstile site key (set via VITE_ env var)
-const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as
-  | string
-  | undefined;
-
 // ── Challenge pre-loading ───────────────────────────────────────
-// On page load we run the full pipeline (Turnstile → /api/challenge)
-// once, cache the resulting challenge JWT, and reuse it for every
-// message within its 5-minute window. A timer regenerates the JWT
-// 30 s before it expires so there is always a warm token ready.
+// On page load we request a challenge JWT from /api/challenge once,
+// cache it, and reuse it for every message within its 5-minute window.
+// A timer regenerates the JWT 30 s before it expires so there is always
+// a warm token ready. Cloudflare Turnstile is disabled: the challenge
+// is requested directly, with no captcha step.
 
 let _challengeJwt: string | undefined;
 let _challengeAge = 0;
@@ -38,78 +34,37 @@ const CHALLENGE_REFRESH_MS = 4.5 * 60 * 1000; // refresh 30 s before expiry
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;       // JWT validity window
 
 /**
- * Render an invisible Turnstile widget and resolve with the response
- * token. Falls back to undefined when Turnstile is not configured or
- * the script hasn't loaded yet.
- */
-function renderTurnstileToken(): Promise<string | undefined> {
-  const turnstile = (window as any).turnstile;
-  if (!turnstile || !TURNSTILE_SITE_KEY) return Promise.resolve(undefined);
-
-  return new Promise<string | undefined>((resolve) => {
-    let settled = false;
-    const done = (token: string | undefined) => {
-      if (settled) return;
-      settled = true;
-      setTimeout(() => {
-        turnstile.remove(widgetId);
-        container.remove();
-      }, 100);
-      resolve(token);
-    };
-
-    const container = document.createElement("div");
-    container.style.position = "fixed";
-    container.style.left = "-9999px";
-    container.style.top = "-9999px";
-    document.body.appendChild(container);
-
-    const widgetId = turnstile.render(container, {
-      sitekey: TURNSTILE_SITE_KEY,
-      size: "invisible",
-      callback: (token: string) => done(token),
-      "error-callback": () => done(undefined),
-      "expired-callback": () => done(undefined),
-    });
-
-    setTimeout(() => done(undefined), 10_000);
-  });
-}
-
-/**
- * Run the full pipeline: Turnstile token → /api/challenge → JWT.
- * Caches the JWT and schedules the next refresh.
+ * Request a fresh challenge JWT from /api/challenge, cache it, and
+ * schedule the next refresh.
  */
 function warmChallenge(): Promise<string | undefined> {
   if (_refreshTimer) clearTimeout(_refreshTimer);
 
-  const promise = renderTurnstileToken()
-    .then(async (turnstileToken) => {
-      try {
-        const res = await fetch("/api/challenge", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ turnstile: turnstileToken }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          return data.challenge as string | undefined;
-        }
-      } catch {
-        // If challenge endpoint fails, proceed without — server decides
+  const promise = (async () => {
+    try {
+      const res = await fetch("/api/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.challenge as string | undefined;
       }
-      return undefined;
-    })
-    .then((jwt) => {
-      _challengeJwt = jwt;
-      _challengeAge = Date.now();
-      _pendingChallenge = null;
-      // Schedule auto-refresh before expiry
-      _refreshTimer = setTimeout(() => {
-        _pendingChallenge = warmChallenge();
-      }, CHALLENGE_REFRESH_MS);
-      return jwt;
-    });
+    } catch {
+      // If challenge endpoint fails, proceed without — server decides
+    }
+    return undefined;
+  })().then((jwt) => {
+    _challengeJwt = jwt;
+    _challengeAge = Date.now();
+    _pendingChallenge = null;
+    // Schedule auto-refresh before expiry
+    _refreshTimer = setTimeout(() => {
+      _pendingChallenge = warmChallenge();
+    }, CHALLENGE_REFRESH_MS);
+    return jwt;
+  });
 
   _pendingChallenge = promise;
   return promise;
@@ -118,7 +73,7 @@ function warmChallenge(): Promise<string | undefined> {
 /**
  * Return the cached challenge JWT, reused for every message within
  * its 5-minute window. Only the background timer triggers a new
- * Turnstile + /api/challenge round-trip.
+ * /api/challenge round-trip.
  */
 async function getChallengeToken(): Promise<string | undefined> {
   if (_pendingChallenge) await _pendingChallenge;
@@ -131,24 +86,9 @@ async function getChallengeToken(): Promise<string | undefined> {
   return _challengeJwt;
 }
 
-// Kick off preloading as soon as the Turnstile script is available.
-// _pendingChallenge is set synchronously so that a message sent before
-// the script loads will await this promise rather than skipping.
-if (TURNSTILE_SITE_KEY) {
-  const waitForTurnstile = (): Promise<void> => {
-    if ((window as any).turnstile) return Promise.resolve();
-    return new Promise((resolve) => {
-      const poll = setInterval(() => {
-        if ((window as any).turnstile) {
-          clearInterval(poll);
-          resolve();
-        }
-      }, 100);
-      setTimeout(() => { clearInterval(poll); resolve(); }, 30_000);
-    });
-  };
-  _pendingChallenge = waitForTurnstile().then(() => warmChallenge());
-}
+// Kick off preloading immediately. _pendingChallenge is set synchronously
+// so that a message sent before the first request resolves will await it.
+_pendingChallenge = warmChallenge();
 
 export type ToolCall = {
   id: string;

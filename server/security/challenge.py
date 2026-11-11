@@ -117,6 +117,9 @@ def _validate_challenge(token: str) -> dict:
 
 async def require_challenge(x_challenge: str | None = Header(None)):
     """FastAPI dependency — validates the X-Challenge header."""
+    if not CHALLENGE_SECRET:
+        # Challenge system not configured — let requests through.
+        return None
     if not x_challenge:
         raise HTTPException(401, "Missing challenge token")
     return _validate_challenge(x_challenge)
